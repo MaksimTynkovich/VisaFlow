@@ -13,5 +13,8 @@ Route::prefix('admin')
             return $request->user();
         });
 
-        // visa-types, form-templates, travel-cases
+        Route::apiResource('visa-types', \App\Http\Controllers\Admin\VisaTypeController::class);
+        Route::get('visa-types/active/list', [\App\Http\Controllers\Admin\VisaTypeController::class, 'active']);
+
+        // form-templates, travel-cases
     });
