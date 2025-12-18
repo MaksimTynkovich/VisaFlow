@@ -10,23 +10,15 @@ use Illuminate\Http\JsonResponse;
 
 class AuthController extends Controller
 {
-    public function __construct(private AdminAuthService $authService) {}
+    public function __construct(
+        private readonly AdminAuthService $authService
+    ) {
+    }
 
     public function login(LoginRequest $request): JsonResponse
     {
         $data = $request->validated();
-
-        try {
-            $result = $this->authService->login($data['email'], $data['password']);
-        } catch (\Exception $e) {
-            return response()->json([
-                'error' => [
-                    'message' => $e->getMessage(),
-                    'code' => $e->getCode(),
-                    'details' => [],
-                ]
-            ], $e->getCode() ?: 400);
-        }
+        $result = $this->authService->login($data['email'], $data['password']);
 
         return response()->json([
             'data' => [
