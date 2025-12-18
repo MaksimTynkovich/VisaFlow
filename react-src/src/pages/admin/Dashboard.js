@@ -1,0 +1,100 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiRequest, tokenStorage } from "../../utils/api";
+import Header from "../../components/admin/Header";
+import UserInfoCard from "../../components/admin/UserInfoCard";
+import StatCard from "../../components/admin/StatCard";
+import QuickActions from "../../components/admin/QuickActions";
+
+function Dashboard() {
+    const navigate = useNavigate();
+    const [currentUser, setCurrentUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadUserData();
+    }, []);
+
+    const loadUserData = async () => {
+        setLoading(true);
+        try {
+            const res = await apiRequest("/api/admin/me");
+            if (res.ok) {
+                const data = await res.json();
+                setCurrentUser(data);
+            } else {
+                throw new Error("Не удалось загрузить данные пользователя");
+            }
+        } catch (error) {
+            console.error("Ошибка загрузки данных:", error);
+            // Если токен невалиден, редирект на логин
+            if (error.message.includes("401") || !tokenStorage.has()) {
+                navigate("/admin/login");
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLogout = () => {
+        tokenStorage.remove();
+        navigate("/admin/login");
+    };
+
+    const visaIcon = (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                stroke="#43a3e4"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+
+    const caseIcon = (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                stroke="#43a3e4"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+
+    const templateIcon = (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path
+                d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 13a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1h-4a1 1 0 01-1-1v-6z"
+                stroke="#43a3e4"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+
+    return (
+        <>
+            <Header
+                userName={currentUser?.name || currentUser?.email}
+                onLogout={handleLogout}
+            />
+            <UserInfoCard user={currentUser} loading={loading} />
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <StatCard title="Типы виз" value="—" icon={visaIcon} />
+                <StatCard title="Заявки" value="—" icon={caseIcon} />
+                <StatCard title="Шаблоны" value="—" icon={templateIcon} />
+            </div>
+
+            <QuickActions />
+        </>
+    );
+}
+
+export default Dashboard;
+

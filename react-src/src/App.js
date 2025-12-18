@@ -1,46 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import './App.css';
-import Login from './Login';
-import Dashboard from './Dashboard';
-import { tokenStorage } from './utils/api';
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import "./App.css";
+import Home from "./pages/Home";
+import Login from "./pages/admin/Login";
+import Dashboard from "./pages/admin/Dashboard";
+import AdminLayout from "./layouts/AdminLayout";
+import ProtectedRoute from "./components/common/ProtectedRoute";
 
 function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Проверяем наличие токена при загрузке приложения
-    if (tokenStorage.has()) {
-      setLoggedIn(true);
-      // Можно загрузить данные пользователя здесь, если нужно
-    }
-    setLoading(false);
-  }, []);
-
-  const handleLogin = (userData) => {
-    setUser(userData);
-    setLoggedIn(true);
-  };
-
-  const handleLogout = () => {
-    setLoggedIn(false);
-    setUser(null);
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-blue-50 to-white">
-        <div className="text-blue-400">Загрузка...</div>
-      </div>
-    );
-  }
-
-  return loggedIn ? (
-    <Dashboard user={user} onLogout={handleLogout} />
-  ) : (
-    <Login onLogin={handleLogin} />
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/admin/login" element={<Login />} />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Dashboard />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
 export default App;
+

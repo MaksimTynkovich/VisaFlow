@@ -1,7 +1,9 @@
 import React, { useState } from "react";
-import { apiUrl, tokenStorage } from "./utils/api";
+import { useNavigate } from "react-router-dom";
+import { apiUrl, tokenStorage } from "../../utils/api";
 
-function Login({ onLogin }) {
+function Login() {
+    const navigate = useNavigate();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
@@ -25,21 +27,29 @@ function Login({ onLogin }) {
             try {
                 data = await res.json();
             } catch (jsonError) {
-                throw new Error(`Ошибка сервера (код ${res.status}). Проверьте, что Laravel API запущен.`);
+                throw new Error(
+                    `Ошибка сервера (код ${res.status}). Проверьте, что Laravel API запущен.`
+                );
             }
 
             if (!res.ok) {
                 // Обработка ошибок валидации
                 if (data?.error?.details) {
                     const validationErrors = Object.values(data.error.details).flat();
-                    throw new Error(validationErrors.join(", ") || data?.error?.message || "Ошибка валидации");
+                    throw new Error(
+                        validationErrors.join(", ") ||
+                        data?.error?.message ||
+                        "Ошибка валидации"
+                    );
                 }
-                throw new Error(data?.error?.message || `Ошибка авторизации (код ${res.status})`);
+                throw new Error(
+                    data?.error?.message || `Ошибка авторизации (код ${res.status})`
+                );
             }
             if (data?.data?.token) {
                 tokenStorage.set(data.data.token);
                 setLoading(false);
-                if (onLogin) onLogin(data.data.user);
+                navigate("/admin");
             } else {
                 throw new Error("Неверный формат ответа");
             }
@@ -66,7 +76,9 @@ function Login({ onLogin }) {
                             <circle cx="12" cy="8" r="4" fill="#43a3e4" />
                         </svg>
                     </div>
-                    <h2 className="text-center text-xl font-semibold text-blue-700">Вход</h2>
+                    <h2 className="text-center text-xl font-semibold text-blue-700">
+                        Вход
+                    </h2>
                 </div>
                 <input
                     type="email"
