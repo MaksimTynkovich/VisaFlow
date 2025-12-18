@@ -4,6 +4,7 @@ import "./App.css";
 import Home from "./pages/Home";
 import Login from "./pages/admin/Login";
 import Dashboard from "./pages/admin/Dashboard";
+import VisaTypes from "./pages/admin/VisaTypes";
 import AdminLayout from "./layouts/AdminLayout";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 
@@ -22,6 +23,7 @@ function App() {
           }
         >
           <Route index element={<Dashboard />} />
+          <Route path="visa-types" element={<VisaTypes />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

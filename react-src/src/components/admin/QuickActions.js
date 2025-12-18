@@ -1,8 +1,11 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 
 function QuickActions({ actions = [] }) {
+    const navigate = useNavigate();
+
     const defaultActions = [
-        { label: "Управление типами виз", onClick: () => { } },
+        { label: "Управление типами виз", onClick: () => navigate("/admin/visa-types") },
         { label: "Управление шаблонами", onClick: () => { } },
         { label: "Просмотр заявок", onClick: () => { } },
         { label: "Настройки системы", onClick: () => { } },
