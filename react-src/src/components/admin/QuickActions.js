@@ -6,7 +6,7 @@ function QuickActions({ actions = [] }) {
 
     const defaultActions = [
         { label: "Управление типами виз", onClick: () => navigate("/admin/visa-types") },
-        { label: "Управление шаблонами", onClick: () => { } },
+        { label: "Управление шаблонами", onClick: () => navigate("/admin/form-templates") },
         { label: "Просмотр заявок", onClick: () => { } },
         { label: "Настройки системы", onClick: () => { } },
     ];
