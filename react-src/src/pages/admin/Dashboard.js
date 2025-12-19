@@ -8,14 +8,15 @@ import QuickActions from "../../components/admin/QuickActions";
 function Dashboard() {
     const navigate = useNavigate();
     const [currentUser, setCurrentUser] = useState(null);
+    const [statistics, setStatistics] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         loadUserData();
+        loadStatistics();
     }, []);
 
     const loadUserData = async () => {
-        setLoading(true);
         try {
             const res = await apiRequest("/api/admin/me");
             if (res.ok) {
@@ -30,6 +31,19 @@ function Dashboard() {
             if (error.message.includes("401") || !tokenStorage.has()) {
                 navigate("/admin/login");
             }
+        }
+    };
+
+    const loadStatistics = async () => {
+        setLoading(true);
+        try {
+            const res = await apiRequest("/api/admin/statistics");
+            if (res.ok) {
+                const data = await res.json();
+                setStatistics(data.data);
+            }
+        } catch (error) {
+            console.error("Ошибка загрузки статистики:", error);
         } finally {
             setLoading(false);
         }
@@ -79,9 +93,46 @@ function Dashboard() {
             <UserInfoCard user={currentUser} loading={loading} />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <StatCard title="Типы виз" value="—" icon={visaIcon} />
-                <StatCard title="Заявки" value="—" icon={caseIcon} />
-                <StatCard title="Шаблоны" value="—" icon={templateIcon} />
+                <StatCard
+                    title="Типы виз"
+                    value={
+                        loading
+                            ? "Загрузка..."
+                            : statistics
+                            ? `${statistics.visa_types.active} / ${statistics.visa_types.total}`
+                            : "—"
+                    }
+                    subtitle={statistics ? "активных из всего" : ""}
+                    icon={visaIcon}
+                />
+                <StatCard
+                    title="Заявки"
+                    value={
+                        loading
+                            ? "Загрузка..."
+                            : statistics
+                            ? statistics.travel_cases.total
+                            : "—"
+                    }
+                    subtitle={
+                        statistics
+                            ? `${statistics.travel_cases.new} новых, ${statistics.travel_cases.filled} заполнено`
+                            : ""
+                    }
+                    icon={caseIcon}
+                />
+                <StatCard
+                    title="Шаблоны"
+                    value={
+                        loading
+                            ? "Загрузка..."
+                            : statistics
+                            ? `${statistics.form_templates.active} / ${statistics.form_templates.total}`
+                            : "—"
+                    }
+                    subtitle={statistics ? "активных из всего" : ""}
+                    icon={templateIcon}
+                />
             </div>
 
             <QuickActions />
