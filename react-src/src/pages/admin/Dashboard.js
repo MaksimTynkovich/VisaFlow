@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest, tokenStorage } from "../../utils/api";
-import Header from "../../components/admin/Header";
 import UserInfoCard from "../../components/admin/UserInfoCard";
 import StatCard from "../../components/admin/StatCard";
 import QuickActions from "../../components/admin/QuickActions";
@@ -34,11 +33,6 @@ function Dashboard() {
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleLogout = () => {
-        tokenStorage.remove();
-        navigate("/admin/login");
     };
 
     const visaIcon = (
@@ -79,10 +73,9 @@ function Dashboard() {
 
     return (
         <>
-            <Header
-                userName={currentUser?.name || currentUser?.email}
-                onLogout={handleLogout}
-            />
+            <div className="mb-6">
+                <h1 className="text-2xl font-bold text-blue-700">Главная панель</h1>
+            </div>
             <UserInfoCard user={currentUser} loading={loading} />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

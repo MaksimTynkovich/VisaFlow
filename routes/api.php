@@ -1,9 +1,14 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use \App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Public\PublicFormController;
 
 Route::post('/admin/auth/login', [AuthController::class, 'login']);
+
+// Публичные роуты для форм
+Route::get('/public/form/{token}', [PublicFormController::class, 'show']);
+Route::post('/public/form/{token}/submit', [PublicFormController::class, 'submit']);
 
 Route::prefix('admin')
     ->middleware(['auth:admin', 'admin'])
@@ -19,5 +24,5 @@ Route::prefix('admin')
         Route::apiResource('form-templates', \App\Http\Controllers\Admin\FormTemplateController::class);
         Route::get('form-templates/active/list', [\App\Http\Controllers\Admin\FormTemplateController::class, 'active']);
 
-        // travel-cases
+        Route::apiResource('travel-cases', \App\Http\Controllers\Admin\TravelCaseController::class);
     });
