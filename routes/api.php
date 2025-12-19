@@ -11,12 +11,17 @@ Route::post('/admin/auth/login', [AuthController::class, 'login']);
 Route::get('/public/form/{token}', [PublicFormController::class, 'show']);
 Route::post('/public/form/{token}/submit', [PublicFormController::class, 'submit']);
 
+// Публичные роуты для черновиков форм
+Route::get('/public/form/{token}/draft', [\App\Http\Controllers\Public\FormDraftController::class, 'get']);
+Route::post('/public/form/{token}/draft', [\App\Http\Controllers\Public\FormDraftController::class, 'save']);
+Route::delete('/public/form/{token}/draft', [\App\Http\Controllers\Public\FormDraftController::class, 'delete']);
+
 Route::prefix('admin')
     ->middleware(['auth:admin', 'admin'])
     ->group(function () {
 
         Route::get('/me', function (\Illuminate\Http\Request $request) {
-            return $request->user();
+            return new \App\Http\Resources\Admin\AdminUserResource($request->user());
         });
 
         Route::get('/statistics', [DashboardController::class, 'statistics']);
