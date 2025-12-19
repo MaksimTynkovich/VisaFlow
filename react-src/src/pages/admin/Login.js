@@ -48,14 +48,28 @@ function Login() {
                     data?.error?.message || `Ошибка авторизации (код ${res.status})`
                 );
             }
-            if (data?.data?.token) {
-                tokenStorage.set(data.data.token);
-                toast.success("Успешный вход в систему");
-                setLoading(false);
-                navigate("/admin");
-            } else {
-                throw new Error("Неверный формат ответа");
+
+            // Проверяем структуру ответа
+            if (!data?.data) {
+                throw new Error("Неверный формат ответа: отсутствует data");
             }
+
+            const token = data.data.token;
+            if (!token) {
+                throw new Error("Неверный формат ответа: отсутствует token");
+            }
+
+            // Сохраняем токен
+            tokenStorage.set(token);
+            
+            // Проверяем, что токен сохранился
+            if (!tokenStorage.has()) {
+                throw new Error("Не удалось сохранить токен");
+            }
+
+            toast.success("Успешный вход в систему");
+            setLoading(false);
+            navigate("/admin");
         } catch (e) {
             let errorMessage = "Произошла ошибка при входе";
             if (e instanceof SyntaxError) {

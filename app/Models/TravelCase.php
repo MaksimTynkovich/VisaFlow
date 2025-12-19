@@ -53,6 +53,11 @@ class TravelCase extends Model
     {
         return $this->hasMany(FormResponse::class);
     }
+
+    public function formDrafts()
+    {
+        return $this->hasMany(FormDraft::class);
+    }
 }
 
 

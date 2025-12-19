@@ -15,10 +15,28 @@ class EnsureAdmin
      */
     public function handle(Request $request, Closure $next): Response
     {
+        // Проверяем, что пользователь аутентифицирован через guard 'admin'
         $user = $request->user('admin');
 
-        if (!$user || !in_array($user->role, ['admin', 'manager'], true)) {
-            abort(403);
+        if (!$user) {
+            return response()->json([
+                'error' => [
+                    'message' => 'Требуется авторизация',
+                    'code' => 401,
+                    'details' => [],
+                ],
+            ], 401);
+        }
+
+        // Проверяем, что пользователь имеет роль admin или manager
+        if (!in_array($user->role, ['admin', 'manager'], true)) {
+            return response()->json([
+                'error' => [
+                    'message' => 'Доступ запрещён',
+                    'code' => 403,
+                    'details' => [],
+                ],
+            ], 403);
         }
 
         return $next($request);

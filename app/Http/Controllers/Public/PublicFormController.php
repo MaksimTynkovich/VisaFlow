@@ -5,13 +5,15 @@ namespace App\Http\Controllers\Public;
 use App\Http\Controllers\Controller;
 use App\Models\TravelCase;
 use App\Services\Admin\TravelCaseService;
+use App\Services\Public\FormDraftService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class PublicFormController extends Controller
 {
     public function __construct(
-        private readonly TravelCaseService $travelCaseService
+        private readonly TravelCaseService $travelCaseService,
+        private readonly FormDraftService $formDraftService
     ) {
     }
 
@@ -25,7 +27,7 @@ class PublicFormController extends Controller
         if (!$travelCase) {
             return response()->json([
                 'error' => [
-                    'message' => 'Заявка не найдена',
+                    'message' => 'Форма не найдена',
                     'code' => 404,
                     'details' => [],
                 ],
@@ -65,7 +67,7 @@ class PublicFormController extends Controller
         if (!$travelCase) {
             return response()->json([
                 'error' => [
-                    'message' => 'Заявка не найдена',
+                    'message' => 'Форма не найдена',
                     'code' => 404,
                     'details' => [],
                 ],
@@ -95,6 +97,9 @@ class PublicFormController extends Controller
                 'filled_at' => now(),
             ]);
         }
+
+        // Удаляем черновик после успешной отправки
+        $this->formDraftService->deleteDraft($token);
 
         return response()->json([
             'data' => [

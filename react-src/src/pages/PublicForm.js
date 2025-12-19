@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { apiUrl } from "../utils/api";
 
@@ -10,6 +10,7 @@ function PublicForm() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [formData, setFormData] = useState({});
+  const saveTimeoutRef = useRef(null);
 
   useEffect(() => {
     loadForm();
@@ -19,24 +20,40 @@ function PublicForm() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(apiUrl(`/api/public/form/${token}`), {
-        headers: {
-          Accept: "application/json",
-        },
-      });
+      // Загружаем форму и черновик параллельно
+      const [formRes, draftRes] = await Promise.all([
+        fetch(apiUrl(`/api/public/form/${token}`), {
+          headers: { Accept: "application/json" },
+        }),
+        fetch(apiUrl(`/api/public/form/${token}/draft`), {
+          headers: { Accept: "application/json" },
+        }).catch(() => null), // Игнорируем ошибки загрузки черновика
+      ]);
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data?.error?.message || "Заявка не найдена");
+      if (!formRes.ok) {
+        const data = await formRes.json();
+        throw new Error(data?.error?.message || "Форма не найдена");
       }
 
-      const data = await res.json();
-      setTravelCase(data.data);
+      const formData = await formRes.json();
+      setTravelCase(formData.data);
 
       // Инициализируем форму на основе схемы
-      if (data.data.form_template?.schema) {
-        initializeForm(data.data.form_template.schema);
+      let initialFormData = {};
+      if (formData.data.form_template?.schema) {
+        initialFormData = initializeFormData(formData.data.form_template.schema);
       }
+
+      // Если есть черновик, загружаем его данные
+      if (draftRes && draftRes.ok) {
+        const draftData = await draftRes.json();
+        if (draftData.data && draftData.data.form_data) {
+          // Объединяем данные схемы с черновиком
+          initialFormData = { ...initialFormData, ...draftData.data.form_data };
+        }
+      }
+
+      setFormData(initialFormData);
     } catch (e) {
       setError(e.message || "Ошибка загрузки формы");
     } finally {
@@ -44,22 +61,58 @@ function PublicForm() {
     }
   };
 
-  const initializeForm = (schema) => {
+  const initializeFormData = (schema) => {
     // Простая инициализация формы на основе схемы
     // Если schema содержит fields, создаём пустые значения
+    const initialData = {};
     if (schema && schema.fields && Array.isArray(schema.fields)) {
-      const initialData = {};
       schema.fields.forEach((field) => {
         initialData[field.name || field.id] = "";
       });
-      setFormData(initialData);
     }
+    return initialData;
+  };
+
+  // Автосохранение черновика с debounce (тихое, без индикаторов)
+  const saveDraft = useCallback(async (data) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await fetch(apiUrl(`/api/public/form/${token}/draft`), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            form_data: data,
+          }),
+        });
+      } catch (e) {
+        console.error("Ошибка автосохранения:", e);
+      }
+    }, 2000); // Сохраняем через 2 секунды после последнего изменения
+  }, [token]);
+
+  // Обработчик изменения полей формы
+  const handleFieldChange = (fieldName, value) => {
+    const newFormData = { ...formData, [fieldName]: value };
+    setFormData(newFormData);
+    saveDraft(newFormData);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setSubmitting(true);
+
+    // Отменяем отложенное автосохранение
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
 
     try {
       const res = await fetch(apiUrl(`/api/public/form/${token}/submit`), {
@@ -68,12 +121,26 @@ function PublicForm() {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({ payload: formData }),
+        body: JSON.stringify({
+          payload: formData,
+        }),
       });
 
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data?.error?.message || "Ошибка при отправке формы");
+      }
+
+      // Удаляем черновик после успешной отправки
+      try {
+        await fetch(apiUrl(`/api/public/form/${token}/draft`), {
+          method: "DELETE",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+      } catch (e) {
+        // Игнорируем ошибку удаления черновика
       }
 
       setSuccess(true);
@@ -83,6 +150,15 @@ function PublicForm() {
       setSubmitting(false);
     }
   };
+
+  // Очистка таймера при размонтировании
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const renderFormFields = () => {
     if (!travelCase?.form_template?.schema) {
@@ -107,10 +183,7 @@ function PublicForm() {
             <textarea
               value={formData[field.name || field.id] || ""}
               onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  [field.name || field.id]: e.target.value,
-                })
+                handleFieldChange(field.name || field.id, e.target.value)
               }
               className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
               rows={field.rows || 4}
@@ -122,10 +195,7 @@ function PublicForm() {
               type={field.type || "text"}
               value={formData[field.name || field.id] || ""}
               onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  [field.name || field.id]: e.target.value,
-                })
+                handleFieldChange(field.name || field.id, e.target.value)
               }
               className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
               required={field.required}
@@ -149,9 +219,7 @@ function PublicForm() {
           <input
             type="text"
             value={formData.first_name || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, first_name: e.target.value })
-            }
+            onChange={(e) => handleFieldChange("first_name", e.target.value)}
             className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
             required
           />
@@ -163,9 +231,7 @@ function PublicForm() {
           <input
             type="text"
             value={formData.last_name || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, last_name: e.target.value })
-            }
+            onChange={(e) => handleFieldChange("last_name", e.target.value)}
             className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
             required
           />
@@ -177,9 +243,7 @@ function PublicForm() {
           <input
             type="email"
             value={formData.email || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, email: e.target.value })
-            }
+            onChange={(e) => handleFieldChange("email", e.target.value)}
             className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
             required
           />
@@ -191,9 +255,7 @@ function PublicForm() {
           <input
             type="tel"
             value={formData.phone || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, phone: e.target.value })
-            }
+            onChange={(e) => handleFieldChange("phone", e.target.value)}
             className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
           />
         </div>
@@ -203,9 +265,7 @@ function PublicForm() {
           </label>
           <textarea
             value={formData.comment || ""}
-            onChange={(e) =>
-              setFormData({ ...formData, comment: e.target.value })
-            }
+            onChange={(e) => handleFieldChange("comment", e.target.value)}
             className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
             rows="4"
           />
@@ -282,6 +342,7 @@ function PublicForm() {
               {error}
             </div>
           )}
+
 
           <form onSubmit={handleSubmit}>
             {renderFormFields()}
