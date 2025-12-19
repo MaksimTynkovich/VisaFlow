@@ -2,15 +2,19 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../../utils/api";
 import TravelCaseForm from "../../components/admin/TravelCaseForm";
+import ConfirmModal from "../../components/common/ConfirmModal";
+import { useToastContext } from "../../contexts/ToastContext";
 
 function TravelCases() {
   const navigate = useNavigate();
+  const toast = useToastContext();
   const [travelCases, setTravelCases] = useState([]);
   const [visaTypes, setVisaTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCase, setEditingCase] = useState(null);
   const [selectedCase, setSelectedCase] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, id: null });
   const [filters, setFilters] = useState({
     visa_type_id: "",
     status: "",
@@ -69,10 +73,13 @@ function TravelCases() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Вы уверены, что хотите удалить эту заявку?")) {
-      return;
-    }
+  const handleDeleteClick = (id) => {
+    setDeleteConfirm({ isOpen: true, id });
+  };
+
+  const handleDelete = async () => {
+    const id = deleteConfirm.id;
+    if (!id) return;
 
     try {
       const res = await apiRequest(`/api/admin/travel-cases/${id}`, {
@@ -80,11 +87,15 @@ function TravelCases() {
       });
 
       if (res.ok) {
+        toast.success("Заявка успешно удалена");
         loadTravelCases();
+      } else {
+        const data = await res.json();
+        throw new Error(data?.error?.message || "Ошибка при удалении");
       }
     } catch (error) {
       console.error("Ошибка удаления:", error);
-      alert("Не удалось удалить заявку");
+      toast.error(error.message || "Не удалось удалить заявку");
     }
   };
 
@@ -118,13 +129,13 @@ function TravelCases() {
 
   const copyToken = (token) => {
     navigator.clipboard.writeText(token);
-    alert("Токен скопирован в буфер обмена!");
+    toast.success("Токен скопирован в буфер обмена");
   };
 
   const copyFormLink = (token) => {
     const link = `${window.location.origin}/form/${token}`;
     navigator.clipboard.writeText(link);
-    alert("Ссылка на форму скопирована в буфер обмена!");
+    toast.success("Ссылка на форму скопирована в буфер обмена");
   };
 
   const getStatusBadge = (status) => {
@@ -316,7 +327,7 @@ function TravelCases() {
                         Редактировать
                       </button>
                       <button
-                        onClick={() => handleDelete(travelCase.id)}
+                        onClick={() => handleDeleteClick(travelCase.id)}
                         className="text-red-500 hover:text-red-700"
                       >
                         Удалить
@@ -385,20 +396,33 @@ function TravelCases() {
           onClose={() => setSelectedCase(null)}
         />
       )}
+
+      <ConfirmModal
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm({ isOpen: false, id: null })}
+        onConfirm={handleDelete}
+        title="Подтверждение удаления"
+        message="Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить."
+        confirmText="Удалить"
+        cancelText="Отмена"
+        type="danger"
+      />
     </div>
   );
 }
 
 function TravelCaseView({ travelCase, onClose }) {
+  const toast = useToastContext();
+
   const copyToken = () => {
     navigator.clipboard.writeText(travelCase.public_token);
-    alert("Токен скопирован!");
+    toast.success("Токен скопирован в буфер обмена");
   };
 
   const copyFormLink = () => {
     const link = `${window.location.origin}/form/${travelCase.public_token}`;
     navigator.clipboard.writeText(link);
-    alert("Ссылка на форму скопирована!");
+    toast.success("Ссылка на форму скопирована в буфер обмена");
   };
 
   return (

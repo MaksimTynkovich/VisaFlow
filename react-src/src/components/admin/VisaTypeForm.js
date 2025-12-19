@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { apiRequest } from "../../utils/api";
+import { useToastContext } from "../../contexts/ToastContext";
 
 function VisaTypeForm({ visaType, onClose, onSuccess }) {
+  const toast = useToastContext();
   const [formData, setFormData] = useState({
     code: "",
     name: "",
@@ -10,6 +12,7 @@ function VisaTypeForm({ visaType, onClose, onSuccess }) {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [validationErrors, setValidationErrors] = useState({});
 
   useEffect(() => {
     if (visaType) {
@@ -22,9 +25,35 @@ function VisaTypeForm({ visaType, onClose, onSuccess }) {
     }
   }, [visaType]);
 
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!formData.code || formData.code.trim() === "") {
+      errors.code = "Код обязателен для заполнения";
+    }
+    
+    if (!formData.name || formData.name.trim() === "") {
+      errors.name = "Название обязательно для заполнения";
+    }
+    
+    if (!formData.country || formData.country.trim() === "") {
+      errors.country = "Страна обязательна для заполнения";
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setValidationErrors({});
+
+    if (!validateForm()) {
+      toast.error("Пожалуйста, заполните все обязательные поля");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -41,16 +70,24 @@ function VisaTypeForm({ visaType, onClose, onSuccess }) {
       if (!res.ok) {
         const data = await res.json();
         if (data?.error?.details) {
-          const validationErrors = Object.values(data.error.details).flat();
-          throw new Error(validationErrors.join(", "));
+          const serverErrors = {};
+          Object.keys(data.error.details).forEach((key) => {
+            serverErrors[key] = data.error.details[key][0];
+          });
+          setValidationErrors(serverErrors);
+          throw new Error("Ошибка валидации");
         }
         throw new Error(data?.error?.message || "Ошибка при сохранении");
       }
 
+      toast.success(visaType ? "Тип визы успешно обновлён" : "Тип визы успешно создан");
       if (onSuccess) onSuccess();
       if (onClose) onClose();
     } catch (e) {
       setError(e.message || "Произошла ошибка");
+      if (!validationErrors || Object.keys(validationErrors).length === 0) {
+        toast.error(e.message || "Произошла ошибка при сохранении");
+      }
     } finally {
       setLoading(false);
     }
@@ -88,13 +125,19 @@ function VisaTypeForm({ visaType, onClose, onSuccess }) {
             <input
               type="text"
               value={formData.code}
-              onChange={(e) =>
-                setFormData({ ...formData, code: e.target.value })
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              onChange={(e) => {
+                setFormData({ ...formData, code: e.target.value });
+                setValidationErrors({ ...validationErrors, code: "" });
+              }}
+              className={`w-full py-2 px-3 border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none ${
+                validationErrors.code ? "border-red-300" : "border-blue-200"
+              }`}
               required
               placeholder="SCHENGEN_TOURIST"
             />
+            {validationErrors.code && (
+              <p className="text-red-500 text-xs mt-1">{validationErrors.code}</p>
+            )}
           </div>
 
           <div>
@@ -104,13 +147,19 @@ function VisaTypeForm({ visaType, onClose, onSuccess }) {
             <input
               type="text"
               value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                setValidationErrors({ ...validationErrors, name: "" });
+              }}
+              className={`w-full py-2 px-3 border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none ${
+                validationErrors.name ? "border-red-300" : "border-blue-200"
+              }`}
               required
               placeholder="Шенгенская туристическая"
             />
+            {validationErrors.name && (
+              <p className="text-red-500 text-xs mt-1">{validationErrors.name}</p>
+            )}
           </div>
 
           <div>
@@ -120,13 +169,19 @@ function VisaTypeForm({ visaType, onClose, onSuccess }) {
             <input
               type="text"
               value={formData.country}
-              onChange={(e) =>
-                setFormData({ ...formData, country: e.target.value })
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              onChange={(e) => {
+                setFormData({ ...formData, country: e.target.value });
+                setValidationErrors({ ...validationErrors, country: "" });
+              }}
+              className={`w-full py-2 px-3 border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none ${
+                validationErrors.country ? "border-red-300" : "border-blue-200"
+              }`}
               required
               placeholder="Германия"
             />
+            {validationErrors.country && (
+              <p className="text-red-500 text-xs mt-1">{validationErrors.country}</p>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

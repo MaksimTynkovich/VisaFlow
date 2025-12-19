@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { apiRequest } from "../../utils/api";
+import { useToastContext } from "../../contexts/ToastContext";
 
 function TravelCaseForm({ travelCase, onClose, onSuccess }) {
+  const toast = useToastContext();
   const [formData, setFormData] = useState({
     visa_type_id: "",
     form_template_id: "",
@@ -12,6 +14,7 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
   const [formTemplates, setFormTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [validationErrors, setValidationErrors] = useState({});
 
   useEffect(() => {
     loadVisaTypes();
@@ -70,9 +73,35 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
     }
   };
 
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!formData.visa_type_id) {
+      errors.visa_type_id = "Выберите тип визы";
+    }
+    
+    if (!formData.form_template_id) {
+      errors.form_template_id = "Выберите шаблон формы";
+    }
+    
+    if (!formData.status) {
+      errors.status = "Выберите статус";
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setValidationErrors({});
+
+    if (!validateForm()) {
+      toast.error("Пожалуйста, заполните все обязательные поля");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -94,17 +123,25 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
       if (!res.ok) {
         const data = await res.json();
         if (data?.error?.details) {
-          const validationErrors = Object.values(data.error.details).flat();
-          throw new Error(validationErrors.join(", "));
+          const serverErrors = {};
+          Object.keys(data.error.details).forEach((key) => {
+            serverErrors[key] = data.error.details[key][0];
+          });
+          setValidationErrors(serverErrors);
+          throw new Error("Ошибка валидации");
         }
         throw new Error(data?.error?.message || "Ошибка при сохранении");
       }
 
       const responseData = await res.json();
+      toast.success(travelCase ? "Заявка успешно обновлена" : "Заявка успешно создана");
       if (onSuccess) onSuccess(responseData.data);
       if (onClose) onClose();
     } catch (e) {
       setError(e.message || "Произошла ошибка");
+      if (!validationErrors || Object.keys(validationErrors).length === 0) {
+        toast.error(e.message || "Произошла ошибка при сохранении");
+      }
     } finally {
       setLoading(false);
     }
@@ -141,10 +178,13 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
             </label>
             <select
               value={formData.visa_type_id}
-              onChange={(e) =>
-                setFormData({ ...formData, visa_type_id: e.target.value })
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              onChange={(e) => {
+                setFormData({ ...formData, visa_type_id: e.target.value });
+                setValidationErrors({ ...validationErrors, visa_type_id: "" });
+              }}
+              className={`w-full py-2 px-3 border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none ${
+                validationErrors.visa_type_id ? "border-red-300" : "border-blue-200"
+              }`}
               required
             >
               <option value="">Выберите тип визы</option>
@@ -154,6 +194,9 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
                 </option>
               ))}
             </select>
+            {validationErrors.visa_type_id && (
+              <p className="text-red-500 text-xs mt-1">{validationErrors.visa_type_id}</p>
+            )}
           </div>
 
           <div>
@@ -162,10 +205,13 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
             </label>
             <select
               value={formData.form_template_id}
-              onChange={(e) =>
-                setFormData({ ...formData, form_template_id: e.target.value })
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              onChange={(e) => {
+                setFormData({ ...formData, form_template_id: e.target.value });
+                setValidationErrors({ ...validationErrors, form_template_id: "" });
+              }}
+              className={`w-full py-2 px-3 border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none ${
+                validationErrors.form_template_id ? "border-red-300" : "border-blue-200"
+              }`}
               required
               disabled={!formData.visa_type_id || formTemplates.length === 0}
             >
@@ -182,6 +228,9 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
                 </option>
               ))}
             </select>
+            {validationErrors.form_template_id && (
+              <p className="text-red-500 text-xs mt-1">{validationErrors.form_template_id}</p>
+            )}
           </div>
 
           <div>

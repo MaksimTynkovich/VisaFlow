@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { apiRequest } from "../../utils/api";
+import { useToastContext } from "../../contexts/ToastContext";
 
 function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
+  const toast = useToastContext();
   const [formData, setFormData] = useState({
     visa_type_id: "",
     name: "",
@@ -13,6 +15,7 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
   const [visaTypes, setVisaTypes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [validationErrors, setValidationErrors] = useState({});
 
   useEffect(() => {
     loadVisaTypes();
@@ -43,10 +46,41 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
     }
   };
 
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!formData.visa_type_id) {
+      errors.visa_type_id = "Выберите тип визы";
+    }
+    
+    if (!formData.name || formData.name.trim() === "") {
+      errors.name = "Название обязательно для заполнения";
+    }
+
+    // Проверяем JSON схему
+    if (schemaText.trim()) {
+      try {
+        JSON.parse(schemaText);
+      } catch (parseError) {
+        errors.schema = "Невалидный JSON. Исправьте ошибки в схеме.";
+      }
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setSchemaError("");
+    setValidationErrors({});
+
+    if (!validateForm()) {
+      toast.error("Пожалуйста, исправьте ошибки в форме");
+      return;
+    }
+
     setLoading(true);
 
     // Парсим JSON схему перед отправкой
@@ -56,6 +90,7 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
         parsedSchema = JSON.parse(schemaText);
       } catch (parseError) {
         setSchemaError("Невалидный JSON. Исправьте ошибки в схеме.");
+        toast.error("Невалидный JSON в схеме");
         setLoading(false);
         return;
       }
@@ -80,16 +115,24 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
       if (!res.ok) {
         const data = await res.json();
         if (data?.error?.details) {
-          const validationErrors = Object.values(data.error.details).flat();
-          throw new Error(validationErrors.join(", "));
+          const serverErrors = {};
+          Object.keys(data.error.details).forEach((key) => {
+            serverErrors[key] = data.error.details[key][0];
+          });
+          setValidationErrors(serverErrors);
+          throw new Error("Ошибка валидации");
         }
         throw new Error(data?.error?.message || "Ошибка при сохранении");
       }
 
+      toast.success(formTemplate ? "Шаблон успешно обновлён" : "Шаблон успешно создан");
       if (onSuccess) onSuccess();
       if (onClose) onClose();
     } catch (e) {
       setError(e.message || "Произошла ошибка");
+      if (!validationErrors || Object.keys(validationErrors).length === 0) {
+        toast.error(e.message || "Произошла ошибка при сохранении");
+      }
     } finally {
       setLoading(false);
     }
@@ -126,10 +169,13 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
             </label>
             <select
               value={formData.visa_type_id}
-              onChange={(e) =>
-                setFormData({ ...formData, visa_type_id: e.target.value })
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              onChange={(e) => {
+                setFormData({ ...formData, visa_type_id: e.target.value });
+                setValidationErrors({ ...validationErrors, visa_type_id: "" });
+              }}
+              className={`w-full py-2 px-3 border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none ${
+                validationErrors.visa_type_id ? "border-red-300" : "border-blue-200"
+              }`}
               required
             >
               <option value="">Выберите тип визы</option>
@@ -139,6 +185,9 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
                 </option>
               ))}
             </select>
+            {validationErrors.visa_type_id && (
+              <p className="text-red-500 text-xs mt-1">{validationErrors.visa_type_id}</p>
+            )}
           </div>
 
           <div>
@@ -148,13 +197,19 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
             <input
               type="text"
               value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                setValidationErrors({ ...validationErrors, name: "" });
+              }}
+              className={`w-full py-2 px-3 border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none ${
+                validationErrors.name ? "border-red-300" : "border-blue-200"
+              }`}
               required
               placeholder="Основная форма для туристической визы"
             />
+            {validationErrors.name && (
+              <p className="text-red-500 text-xs mt-1">{validationErrors.name}</p>
+            )}
           </div>
 
           <div>
@@ -203,10 +258,10 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
               rows="8"
               placeholder='{"fields": []}'
             />
-            {schemaError && (
-              <p className="text-xs text-red-500 mt-1">{schemaError}</p>
+            {(schemaError || validationErrors.schema) && (
+              <p className="text-xs text-red-500 mt-1">{schemaError || validationErrors.schema}</p>
             )}
-            {!schemaError && (
+            {!schemaError && !validationErrors.schema && (
               <p className="text-xs text-blue-400 mt-1">
                 Введите валидный JSON или оставьте пустым
               </p>
