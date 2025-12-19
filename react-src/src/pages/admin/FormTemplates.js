@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { apiRequest } from "../../utils/api";
 import FormTemplateForm from "../../components/admin/FormTemplateForm";
+import ConfirmModal from "../../components/common/ConfirmModal";
+import { useToastContext } from "../../contexts/ToastContext";
 
 function FormTemplates() {
+  const toast = useToastContext();
   const [formTemplates, setFormTemplates] = useState([]);
   const [visaTypes, setVisaTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, id: null });
   const [filters, setFilters] = useState({
     visa_type_id: "",
     status: "",
@@ -64,10 +68,13 @@ function FormTemplates() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Вы уверены, что хотите удалить этот шаблон?")) {
-      return;
-    }
+  const handleDeleteClick = (id) => {
+    setDeleteConfirm({ isOpen: true, id });
+  };
+
+  const handleDelete = async () => {
+    const id = deleteConfirm.id;
+    if (!id) return;
 
     try {
       const res = await apiRequest(`/api/admin/form-templates/${id}`, {
@@ -75,11 +82,15 @@ function FormTemplates() {
       });
 
       if (res.ok) {
+        toast.success("Шаблон успешно удалён");
         loadFormTemplates();
+      } else {
+        const data = await res.json();
+        throw new Error(data?.error?.message || "Ошибка при удалении");
       }
     } catch (error) {
       console.error("Ошибка удаления:", error);
-      alert("Не удалось удалить шаблон");
+      toast.error(error.message || "Не удалось удалить шаблон");
     }
   };
 
@@ -238,7 +249,7 @@ function FormTemplates() {
                         Редактировать
                       </button>
                       <button
-                        onClick={() => handleDelete(template.id)}
+                        onClick={() => handleDeleteClick(template.id)}
                         className="text-red-500 hover:text-red-700"
                       >
                         Удалить
@@ -300,6 +311,17 @@ function FormTemplates() {
           onSuccess={handleFormSuccess}
         />
       )}
+
+      <ConfirmModal
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm({ isOpen: false, id: null })}
+        onConfirm={handleDelete}
+        title="Подтверждение удаления"
+        message="Вы уверены, что хотите удалить этот шаблон? Это действие нельзя отменить."
+        confirmText="Удалить"
+        cancelText="Отмена"
+        type="danger"
+      />
     </div>
   );
 }

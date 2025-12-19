@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiUrl, tokenStorage } from "../../utils/api";
+import { useToastContext } from "../../contexts/ToastContext";
 
 function Login() {
     const navigate = useNavigate();
+    const toast = useToastContext();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
@@ -48,17 +50,21 @@ function Login() {
             }
             if (data?.data?.token) {
                 tokenStorage.set(data.data.token);
+                toast.success("Успешный вход в систему");
                 setLoading(false);
                 navigate("/admin");
             } else {
                 throw new Error("Неверный формат ответа");
             }
         } catch (e) {
+            let errorMessage = "Произошла ошибка при входе";
             if (e instanceof SyntaxError) {
-                setError("Ошибка сервера: неверный формат ответа");
-            } else {
-                setError(e.message || "Произошла ошибка при входе");
+                errorMessage = "Ошибка сервера: неверный формат ответа. Проверьте, что Laravel API запущен.";
+            } else if (e.message) {
+                errorMessage = e.message;
             }
+            setError(errorMessage);
+            toast.error(errorMessage);
             setLoading(false);
         }
     };
@@ -95,11 +101,7 @@ function Login() {
                     placeholder="Пароль"
                     className="w-full py-2 px-3 border border-blue-200 rounded-md text-base bg-blue-50 text-blue-700 placeholder:text-blue-300 focus:ring-2 focus:ring-blue-200 outline-none transition"
                 />
-                {error && (
-                    <div className="text-red-500 bg-red-50 rounded py-1 text-center text-sm font-medium -mt-2 mb-1">
-                        {error}
-                    </div>
-                )}
+
                 <button
                     type="submit"
                     className="w-full py-2 mt-1 bg-blue-500 hover:bg-blue-600 transition-colors text-white rounded-md font-bold text-[16px] tracking-wide shadow-sm disabled:opacity-50"
