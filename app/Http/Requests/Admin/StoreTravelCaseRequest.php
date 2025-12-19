@@ -5,9 +5,8 @@ namespace App\Http\Requests\Admin;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
-use Illuminate\Validation\Rule;
 
-class UpdateFormTemplateRequest extends FormRequest
+class StoreTravelCaseRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -18,13 +17,10 @@ class UpdateFormTemplateRequest extends FormRequest
     {
         return [
             'visa_type_id' => 'required|exists:visa_types,id',
-            'name' => 'required|string|max:255',
-            'schema' => 'nullable|array',
-            'status' => [
-                'required',
-                'string',
-                Rule::in(['draft', 'active', 'archived']),
-            ],
+            'form_template_id' => 'required|exists:form_templates,id',
+            'user_id' => 'nullable|exists:users,id',
+            'status' => 'sometimes|string|in:new,filled,archived',
+            'created_by' => 'sometimes|exists:users,id',
         ];
     }
 
@@ -39,6 +35,14 @@ class UpdateFormTemplateRequest extends FormRequest
                 ],
             ], 422)
         );
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'created_by' => $this->user()->id,
+            'status' => $this->input('status', 'new'),
+        ]);
     }
 }
 

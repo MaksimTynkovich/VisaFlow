@@ -7,39 +7,28 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class FormTemplate extends Model
+class FormResponse extends Model
 {
     use HasFactory;
     use SoftDeletes;
 
     protected $fillable = [
-        'visa_type_id',
-        'created_by',
-        'name',
-        'schema',
-        'status',
+        'travel_case_id',
+        'payload',
+        'submitted_at',
     ];
 
     protected $casts = [
-        'schema' => 'array',
+        'payload' => 'array',
+        'submitted_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
     ];
 
-    public function visaType(): BelongsTo
+    public function travelCase(): BelongsTo
     {
-        return $this->belongsTo(VisaType::class);
-    }
-
-    public function creator(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'created_by');
-    }
-
-    public function travelCases()
-    {
-        return $this->hasMany(TravelCase::class);
+        return $this->belongsTo(TravelCase::class);
     }
 }
 
