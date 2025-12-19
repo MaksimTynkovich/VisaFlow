@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import Login from "./pages/admin/Login";
 import Dashboard from "./pages/admin/Dashboard";
 import VisaTypes from "./pages/admin/VisaTypes";
+import FormTemplates from "./pages/admin/FormTemplates";
 import AdminLayout from "./layouts/AdminLayout";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 
@@ -24,6 +25,7 @@ function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="visa-types" element={<VisaTypes />} />
+          <Route path="form-templates" element={<FormTemplates />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

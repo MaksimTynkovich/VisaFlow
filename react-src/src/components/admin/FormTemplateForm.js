@@ -1,0 +1,245 @@
+import React, { useState, useEffect } from "react";
+import { apiRequest } from "../../utils/api";
+
+function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
+  const [formData, setFormData] = useState({
+    visa_type_id: "",
+    name: "",
+    schema: null,
+    status: "draft",
+  });
+  const [schemaText, setSchemaText] = useState("");
+  const [schemaError, setSchemaError] = useState("");
+  const [visaTypes, setVisaTypes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadVisaTypes();
+    if (formTemplate) {
+      setFormData({
+        visa_type_id: formTemplate.visa_type_id || "",
+        name: formTemplate.name || "",
+        schema: formTemplate.schema || null,
+        status: formTemplate.status || "draft",
+      });
+      setSchemaText(
+        formTemplate.schema
+          ? JSON.stringify(formTemplate.schema, null, 2)
+          : ""
+      );
+    }
+  }, [formTemplate]);
+
+  const loadVisaTypes = async () => {
+    try {
+      const res = await apiRequest("/api/admin/visa-types/active/list");
+      if (res.ok) {
+        const data = await res.json();
+        setVisaTypes(data.data);
+      }
+    } catch (error) {
+      console.error("Ошибка загрузки типов виз:", error);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSchemaError("");
+    setLoading(true);
+
+    // Парсим JSON схему перед отправкой
+    let parsedSchema = null;
+    if (schemaText.trim()) {
+      try {
+        parsedSchema = JSON.parse(schemaText);
+      } catch (parseError) {
+        setSchemaError("Невалидный JSON. Исправьте ошибки в схеме.");
+        setLoading(false);
+        return;
+      }
+    }
+
+    try {
+      const url = formTemplate
+        ? `/api/admin/form-templates/${formTemplate.id}`
+        : "/api/admin/form-templates";
+      const method = formTemplate ? "PUT" : "POST";
+
+      const payload = {
+        ...formData,
+        schema: parsedSchema,
+      };
+
+      const res = await apiRequest(url, {
+        method,
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        if (data?.error?.details) {
+          const validationErrors = Object.values(data.error.details).flat();
+          throw new Error(validationErrors.join(", "));
+        }
+        throw new Error(data?.error?.message || "Ошибка при сохранении");
+      }
+
+      if (onSuccess) onSuccess();
+      if (onClose) onClose();
+    } catch (e) {
+      setError(e.message || "Произошла ошибка");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-blue-700">
+            {formTemplate ? "Редактировать шаблон" : "Создать шаблон формы"}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-blue-400 hover:text-blue-600"
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-blue-700 mb-1">
+              Тип визы *
+            </label>
+            <select
+              value={formData.visa_type_id}
+              onChange={(e) =>
+                setFormData({ ...formData, visa_type_id: e.target.value })
+              }
+              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              required
+            >
+              <option value="">Выберите тип визы</option>
+              {visaTypes.map((vt) => (
+                <option key={vt.id} value={vt.id}>
+                  {vt.name} ({vt.country})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-blue-700 mb-1">
+              Название шаблона *
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
+              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              required
+              placeholder="Основная форма для туристической визы"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-blue-700 mb-1">
+              Статус *
+            </label>
+            <select
+              value={formData.status}
+              onChange={(e) =>
+                setFormData({ ...formData, status: e.target.value })
+              }
+              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              required
+            >
+              <option value="draft">Черновик</option>
+              <option value="active">Активен</option>
+              <option value="archived">Архив</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-blue-700 mb-1">
+              Схема формы (JSON)
+            </label>
+            <textarea
+              value={schemaText}
+              onChange={(e) => {
+                const text = e.target.value;
+                setSchemaText(text);
+                setSchemaError("");
+
+                // Проверяем валидность JSON в реальном времени (не блокируем ввод)
+                if (text.trim()) {
+                  try {
+                    JSON.parse(text);
+                  } catch {
+                    // JSON невалиден, но не показываем ошибку пока пользователь не попытается сохранить
+                  }
+                }
+              }}
+              className={`w-full py-2 px-3 border rounded-md bg-blue-50 text-blue-700 focus:ring-2 outline-none font-mono text-sm ${
+                schemaError
+                  ? "border-red-300 focus:ring-red-200"
+                  : "border-blue-200 focus:ring-blue-200"
+              }`}
+              rows="8"
+              placeholder='{"fields": []}'
+            />
+            {schemaError && (
+              <p className="text-xs text-red-500 mt-1">{schemaError}</p>
+            )}
+            {!schemaError && (
+              <p className="text-xs text-blue-400 mt-1">
+                Введите валидный JSON или оставьте пустым
+              </p>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-red-500 bg-red-50 rounded py-2 px-3 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 px-4 border border-blue-200 text-blue-700 rounded-md hover:bg-blue-50 transition-colors"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-md font-medium transition-colors disabled:opacity-50"
+            >
+              {loading ? "Сохранение..." : "Сохранить"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default FormTemplateForm;
+
