@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Public\PublicFormController;
 
 Route::post('/admin/auth/login', [AuthController::class, 'login']);
@@ -17,6 +18,8 @@ Route::prefix('admin')
         Route::get('/me', function (\Illuminate\Http\Request $request) {
             return $request->user();
         });
+
+        Route::get('/statistics', [DashboardController::class, 'statistics']);
 
         Route::apiResource('visa-types', \App\Http\Controllers\Admin\VisaTypeController::class);
         Route::get('visa-types/active/list', [\App\Http\Controllers\Admin\VisaTypeController::class, 'active']);
