@@ -1,27 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { apiRequest, tokenStorage } from "../../utils/api";
+import { tokenStorage } from "../../utils/api";
+import { useUser } from "../../contexts/UserContext";
 
 function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const res = await apiRequest("/api/admin/me");
-      if (res.ok) {
-        const data = await res.json();
-        setCurrentUser(data);
-      }
-    } catch (error) {
-      console.error("Ошибка загрузки пользователя:", error);
-    }
-  };
+  const { currentUser } = useUser();
 
   const handleLogout = () => {
     tokenStorage.remove();
