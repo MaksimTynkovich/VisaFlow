@@ -1,53 +1,42 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { apiRequest, tokenStorage } from "../../utils/api";
+import { apiRequest } from "../../utils/api";
+import { useUser } from "../../contexts/UserContext";
 import UserInfoCard from "../../components/admin/UserInfoCard";
 import StatCard from "../../components/admin/StatCard";
 import QuickActions from "../../components/admin/QuickActions";
 
 function Dashboard() {
-    const navigate = useNavigate();
-    const [currentUser, setCurrentUser] = useState(null);
+    const { currentUser } = useUser();
     const [statistics, setStatistics] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadUserData();
+        let isMounted = true;
+
+        const loadStatistics = async () => {
+            try {
+                const res = await apiRequest("/api/admin/statistics");
+                if (!isMounted) return;
+
+                if (res.ok) {
+                    const data = await res.json();
+                    setStatistics(data.data);
+                }
+            } catch (error) {
+                console.error("Ошибка загрузки статистики:", error);
+            } finally {
+                if (isMounted) {
+                    setLoading(false);
+                }
+            }
+        };
+
         loadStatistics();
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
-
-    const loadUserData = async () => {
-        try {
-            const res = await apiRequest("/api/admin/me");
-            if (res.ok) {
-                const data = await res.json();
-                setCurrentUser(data);
-            } else {
-                throw new Error("Не удалось загрузить данные пользователя");
-            }
-        } catch (error) {
-            console.error("Ошибка загрузки данных:", error);
-            // Если токен невалиден, редирект на логин
-            if (error.message.includes("401") || !tokenStorage.has()) {
-                navigate("/admin/login");
-            }
-        }
-    };
-
-    const loadStatistics = async () => {
-        setLoading(true);
-        try {
-            const res = await apiRequest("/api/admin/statistics");
-            if (res.ok) {
-                const data = await res.json();
-                setStatistics(data.data);
-            }
-        } catch (error) {
-            console.error("Ошибка загрузки статистики:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const visaIcon = (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">

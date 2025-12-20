@@ -11,11 +11,13 @@ import PublicForm from "./pages/PublicForm";
 import AdminLayout from "./layouts/AdminLayout";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import { ToastProvider } from "./contexts/ToastContext";
+import { UserProvider } from "./contexts/UserContext";
 
 function App() {
   return (
     <ToastProvider>
-      <BrowserRouter>
+      <UserProvider>
+        <BrowserRouter>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/form/:token" element={<PublicForm />} />
@@ -36,6 +38,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      </UserProvider>
     </ToastProvider>
   );
 }
