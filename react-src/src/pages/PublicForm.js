@@ -97,9 +97,75 @@ function PublicForm() {
     }, 2000); // Сохраняем через 2 секунды после последнего изменения
   }, [token]);
 
+  // Проверка, должно ли поле быть видимым на основе условий
+  const isFieldVisible = (field) => {
+    if (!field.when) {
+      return true; // Поле без условий всегда видимо
+    }
+
+    const condition = field.when;
+    const dependentFieldValue = formData[condition.field];
+
+    // Если зависимое поле не заполнено, скрываем поле
+    if (dependentFieldValue === undefined || dependentFieldValue === null || dependentFieldValue === "") {
+      return false;
+    }
+
+    // Поддержка оператора equals
+    if (condition.equals !== undefined) {
+      return dependentFieldValue === condition.equals;
+    }
+
+    // Поддержка оператора not_equals
+    if (condition.not_equals !== undefined) {
+      return dependentFieldValue !== condition.not_equals;
+    }
+
+    // Поддержка оператора in (массив значений)
+    if (condition.in !== undefined && Array.isArray(condition.in)) {
+      return condition.in.includes(dependentFieldValue);
+    }
+
+    // Поддержка оператора not_in (массив значений)
+    if (condition.not_in !== undefined && Array.isArray(condition.not_in)) {
+      return !condition.not_in.includes(dependentFieldValue);
+    }
+
+    // Если условие не распознано, показываем поле
+    return true;
+  };
+
   // Обработчик изменения полей формы
   const handleFieldChange = (fieldName, value) => {
     const newFormData = { ...formData, [fieldName]: value };
+    
+    // Очищаем значения полей, которые стали скрытыми из-за изменения
+    if (travelCase?.form_template?.schema?.fields) {
+      travelCase.form_template.schema.fields.forEach((field) => {
+        const fieldId = field.name || field.id;
+        if (field.when && field.when.field === fieldName) {
+          // Если это поле зависит от изменяемого поля, проверяем видимость
+          const condition = field.when;
+          let shouldBeVisible = true;
+          
+          if (condition.equals !== undefined) {
+            shouldBeVisible = value === condition.equals;
+          } else if (condition.not_equals !== undefined) {
+            shouldBeVisible = value !== condition.not_equals;
+          } else if (condition.in !== undefined && Array.isArray(condition.in)) {
+            shouldBeVisible = condition.in.includes(value);
+          } else if (condition.not_in !== undefined && Array.isArray(condition.not_in)) {
+            shouldBeVisible = !condition.not_in.includes(value);
+          }
+          
+          // Если поле должно быть скрыто, очищаем его значение
+          if (!shouldBeVisible && newFormData[fieldId]) {
+            delete newFormData[fieldId];
+          }
+        }
+      });
+    }
+    
     setFormData(newFormData);
     saveDraft(newFormData);
   };
@@ -173,40 +239,65 @@ function PublicForm() {
 
     // Если есть структурированные поля
     if (schema.fields && Array.isArray(schema.fields)) {
-      return schema.fields.map((field, index) => (
-        <div key={index} className="mb-4">
-          <label className="block text-sm font-medium text-blue-700 mb-1">
-            {field.label || field.name || `Поле ${index + 1}`}
-            {field.required && <span className="text-red-500 ml-1">*</span>}
-          </label>
-          {field.type === "textarea" ? (
-            <textarea
-              value={formData[field.name || field.id] || ""}
-              onChange={(e) =>
-                handleFieldChange(field.name || field.id, e.target.value)
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-              rows={field.rows || 4}
-              required={field.required}
-              placeholder={field.placeholder}
-            />
-          ) : (
-            <input
-              type={field.type || "text"}
-              value={formData[field.name || field.id] || ""}
-              onChange={(e) =>
-                handleFieldChange(field.name || field.id, e.target.value)
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-              required={field.required}
-              placeholder={field.placeholder}
-            />
-          )}
-          {field.description && (
-            <p className="text-xs text-blue-400 mt-1">{field.description}</p>
-          )}
-        </div>
-      ));
+      return schema.fields
+        .filter((field) => isFieldVisible(field)) // Фильтруем поля по условиям
+        .map((field, index) => {
+          const fieldId = field.name || field.id || `field_${index}`;
+          
+          return (
+            <div key={fieldId} className="mb-4">
+              <label className="block text-sm font-medium text-blue-700 mb-1">
+                {field.label || field.name || `Поле ${index + 1}`}
+                {field.required && <span className="text-red-500 ml-1">*</span>}
+              </label>
+              
+              {field.type === "select" ? (
+                <select
+                  value={formData[fieldId] || ""}
+                  onChange={(e) => handleFieldChange(fieldId, e.target.value)}
+                  className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+                  required={field.required}
+                >
+                  <option value="">Выберите...</option>
+                  {field.options &&
+                    field.options.map((option, optIndex) => {
+                      const optionValue =
+                        typeof option === "string" ? option : option.value;
+                      const optionLabel =
+                        typeof option === "string" ? option : option.label;
+                      return (
+                        <option key={optIndex} value={optionValue}>
+                          {optionLabel || optionValue}
+                        </option>
+                      );
+                    })}
+                </select>
+              ) : field.type === "textarea" ? (
+                <textarea
+                  value={formData[fieldId] || ""}
+                  onChange={(e) => handleFieldChange(fieldId, e.target.value)}
+                  className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+                  rows={field.rows || 4}
+                  required={field.required}
+                  placeholder={field.placeholder}
+                />
+              ) : (
+                <input
+                  type={field.type || "text"}
+                  value={formData[fieldId] || ""}
+                  onChange={(e) => handleFieldChange(fieldId, e.target.value)}
+                  className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+                  required={field.required}
+                  placeholder={field.placeholder}
+                />
+              )}
+              
+              {field.description && (
+                <p className="text-xs text-blue-400 mt-1">{field.description}</p>
+              )}
+            </div>
+          );
+        });
     }
 
     // Если схема простая (просто объект), создаём базовые поля
