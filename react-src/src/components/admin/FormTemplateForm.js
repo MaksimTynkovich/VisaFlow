@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { apiRequest } from "../../utils/api";
 import { useToastContext } from "../../contexts/ToastContext";
+import SchemaEditor from "./SchemaEditor";
 
 function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
   const toast = useToastContext();
@@ -16,23 +17,40 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
+  const [editorMode, setEditorMode] = useState("visual"); // "visual" или "json"
 
   useEffect(() => {
     loadVisaTypes();
     if (formTemplate) {
+      const schema = formTemplate.schema || null;
       setFormData({
         visa_type_id: formTemplate.visa_type_id || "",
         name: formTemplate.name || "",
-        schema: formTemplate.schema || null,
+        schema: schema,
         status: formTemplate.status || "draft",
       });
       setSchemaText(
-        formTemplate.schema
-          ? JSON.stringify(formTemplate.schema, null, 2)
+        schema
+          ? JSON.stringify(schema, null, 2)
           : ""
       );
+    } else {
+      // При создании нового шаблона
+      setFormData({
+        visa_type_id: "",
+        name: "",
+        schema: null,
+        status: "draft",
+      });
+      setSchemaText("");
     }
   }, [formTemplate]);
+
+  // Синхронизация визуального редактора с JSON
+  const handleSchemaChange = (newSchema) => {
+    setSchemaText(JSON.stringify(newSchema, null, 2));
+    setFormData({ ...formData, schema: newSchema });
+  };
 
   const loadVisaTypes = async () => {
     try {
@@ -60,9 +78,52 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
     // Проверяем JSON схему
     if (schemaText.trim()) {
       try {
-        JSON.parse(schemaText);
+        const parsed = JSON.parse(schemaText);
+        
+        // Валидация структуры схемы
+        if (parsed.fields && Array.isArray(parsed.fields)) {
+          const fieldIds = new Set();
+          parsed.fields.forEach((field, index) => {
+            const fieldId = field.name || field.id || `field_${index}`;
+            
+            // Проверка на дубликаты ID
+            if (fieldIds.has(fieldId)) {
+              errors.schema = `Дублирующийся ID поля: ${fieldId}`;
+            }
+            fieldIds.add(fieldId);
+            
+            // Валидация условий
+            if (field.when) {
+              if (!field.when.field) {
+                errors.schema = `Поле ${fieldId}: условие 'when' должно содержать 'field'`;
+              }
+              if (
+                field.when.equals === undefined &&
+                field.when.not_equals === undefined &&
+                field.when.in === undefined &&
+                field.when.not_in === undefined
+              ) {
+                errors.schema = `Поле ${fieldId}: условие 'when' должно содержать оператор (equals, not_equals, in, not_in)`;
+              }
+              // Проверка, что зависимое поле существует
+              if (field.when.field) {
+                const dependentFieldExists = parsed.fields.some(
+                  (f) => (f.name || f.id) === field.when.field
+                );
+                if (!dependentFieldExists) {
+                  errors.schema = `Поле ${fieldId}: зависимое поле '${field.when.field}' не найдено`;
+                }
+              }
+            }
+            
+            // Проверка select полей
+            if (field.type === "select" && !field.options) {
+              errors.schema = `Поле ${fieldId}: select поле должно содержать 'options'`;
+            }
+          });
+        }
       } catch (parseError) {
-        errors.schema = "Невалидный JSON. Исправьте ошибки в схеме.";
+        errors.schema = `Невалидный JSON: ${parseError.message}`;
       }
     }
 
@@ -231,40 +292,147 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-blue-700 mb-1">
-              Схема формы (JSON)
-            </label>
-            <textarea
-              value={schemaText}
-              onChange={(e) => {
-                const text = e.target.value;
-                setSchemaText(text);
-                setSchemaError("");
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-blue-700">
+                Схема формы
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditorMode("visual")}
+                  className={`px-3 py-1 rounded text-sm ${
+                    editorMode === "visual"
+                      ? "bg-blue-500 text-white"
+                      : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                  }`}
+                >
+                  Визуальный редактор
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditorMode("json");
+                    // Синхронизируем JSON при переключении
+                    if (formData.schema) {
+                      setSchemaText(JSON.stringify(formData.schema, null, 2));
+                    }
+                  }}
+                  className={`px-3 py-1 rounded text-sm ${
+                    editorMode === "json"
+                      ? "bg-blue-500 text-white"
+                      : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                  }`}
+                >
+                  JSON редактор
+                </button>
+              </div>
+            </div>
 
-                // Проверяем валидность JSON в реальном времени (не блокируем ввод)
-                if (text.trim()) {
-                  try {
-                    JSON.parse(text);
-                  } catch {
-                    // JSON невалиден, но не показываем ошибку пока пользователь не попытается сохранить
-                  }
-                }
-              }}
-              className={`w-full py-2 px-3 border rounded-md bg-blue-50 text-blue-700 focus:ring-2 outline-none font-mono text-sm ${
-                schemaError
-                  ? "border-red-300 focus:ring-red-200"
-                  : "border-blue-200 focus:ring-blue-200"
-              }`}
-              rows="8"
-              placeholder='{"fields": []}'
-            />
-            {(schemaError || validationErrors.schema) && (
-              <p className="text-xs text-red-500 mt-1">{schemaError || validationErrors.schema}</p>
-            )}
-            {!schemaError && !validationErrors.schema && (
-              <p className="text-xs text-blue-400 mt-1">
-                Введите валидный JSON или оставьте пустым
-              </p>
+            {editorMode === "visual" ? (
+              <div className="border border-blue-200 rounded-md p-4 bg-blue-50">
+                <SchemaEditor
+                  schema={formData.schema || { fields: [] }}
+                  onChange={handleSchemaChange}
+                />
+              </div>
+            ) : (
+              <>
+                <textarea
+                  value={schemaText}
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    setSchemaText(text);
+                    setSchemaError("");
+
+                    // Проверяем валидность JSON в реальном времени (не блокируем ввод)
+                    if (text.trim()) {
+                      try {
+                        JSON.parse(text);
+                      } catch {
+                        // JSON невалиден, но не показываем ошибку пока пользователь не попытается сохранить
+                      }
+                    }
+                  }}
+                  className={`w-full py-2 px-3 border rounded-md bg-blue-50 text-blue-700 focus:ring-2 outline-none font-mono text-sm ${
+                    schemaError
+                      ? "border-red-300 focus:ring-red-200"
+                      : "border-blue-200 focus:ring-blue-200"
+                  }`}
+                  rows="8"
+                  placeholder='{"fields": []}'
+                />
+                <div className="mt-2 text-xs text-blue-500 bg-blue-50 p-3 rounded border border-blue-200">
+              <p className="font-semibold mb-2">Пример схемы с условиями:</p>
+              <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
+{`{
+  "fields": [
+    {
+      "id": "phone",
+      "type": "tel",
+      "label": "Телефон",
+      "required": true,
+      "placeholder": "+7 (999) 123-45-67"
+    },
+    {
+      "id": "email",
+      "type": "email",
+      "label": "Email",
+      "required": true,
+      "placeholder": "example@mail.ru"
+    },
+    {
+      "id": "document_type",
+      "type": "select",
+      "label": "Тип документа",
+      "required": true,
+      "options": [
+        {"value": "passport", "label": "Паспорт"},
+        {"value": "id_card_biometric", "label": "ID карта + биометрический"}
+      ]
+    },
+    {
+      "id": "passport_number",
+      "type": "text",
+      "label": "Номер паспорта",
+      "required": true,
+      "when": {
+        "field": "document_type",
+        "equals": "passport"
+      }
+    },
+    {
+      "id": "id_card_number",
+      "type": "text",
+      "label": "Номер ID карты",
+      "required": true,
+      "when": {
+        "field": "document_type",
+        "equals": "id_card_biometric"
+      }
+    },
+    {
+      "id": "registration",
+      "type": "text",
+      "label": "Прописка",
+      "required": true,
+      "when": {
+        "field": "document_type",
+        "equals": "id_card_biometric"
+      }
+    }
+  ]
+}`}
+              </pre>
+                </div>
+                {(schemaError || validationErrors.schema) && (
+                  <p className="text-xs text-red-500 mt-1">{schemaError || validationErrors.schema}</p>
+                )}
+                {!schemaError && !validationErrors.schema && (
+                  <p className="text-xs text-blue-400 mt-1">
+                    Введите валидный JSON. Поддерживаются условия "when" для условного отображения полей.
+                  </p>
+                )}
+              </>
             )}
           </div>
 
