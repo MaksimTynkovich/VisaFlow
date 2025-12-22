@@ -46,9 +46,24 @@ class TravelCaseResource extends JsonResource
             }),
             'form_responses' => $this->whenLoaded('formResponses', function () {
                 return $this->formResponses->map(function ($response) {
+                    $files = [];
+                    if ($response->relationLoaded('files') && $response->files) {
+                        $files = $response->files->map(function ($file) {
+                            return [
+                                'id' => $file->id,
+                                'field_id' => $file->field_id,
+                                'original_name' => $file->original_name,
+                                'file_size' => $file->file_size,
+                                'mime_type' => $file->mime_type,
+                                'url' => url("/api/public/form/file/{$file->id}"),
+                            ];
+                        })->toArray();
+                    }
+
                     return [
                         'id' => $response->id,
                         'payload' => $response->payload,
+                        'files' => $files,
                         'submitted_at' => $response->submitted_at,
                         'created_at' => $response->created_at,
                     ];
