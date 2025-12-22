@@ -54,6 +54,44 @@ class PublicFormController extends Controller
     }
 
     /**
+     * Получить последнюю отправку формы по токену.
+     */
+    public function getLastSubmission(string $token): JsonResponse
+    {
+        $travelCase = $this->travelCaseService->findByToken($token);
+
+        if (!$travelCase) {
+            return response()->json([
+                'error' => [
+                    'message' => 'Форма не найдена',
+                    'code' => 404,
+                    'details' => [],
+                ],
+            ], 404);
+        }
+
+        // Получаем последнюю отправку (не удаленную, soft deletes автоматически исключаются)
+        $lastResponse = $travelCase->formResponses()
+            ->orderBy('submitted_at', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (!$lastResponse) {
+            return response()->json([
+                'data' => null,
+            ]);
+        }
+
+        return response()->json([
+            'data' => [
+                'id' => $lastResponse->id,
+                'payload' => $lastResponse->payload,
+                'submitted_at' => $lastResponse->submitted_at?->toIso8601String() ?? $lastResponse->submitted_at?->format('c'),
+            ],
+        ]);
+    }
+
+    /**
      * Сохранить ответ на форму.
      */
     public function submit(Request $request, string $token): JsonResponse
