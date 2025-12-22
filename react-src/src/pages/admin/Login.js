@@ -2,10 +2,12 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiUrl, tokenStorage } from "../../utils/api";
 import { useToastContext } from "../../contexts/ToastContext";
+import { useUser } from "../../contexts/UserContext";
 
 function Login() {
     const navigate = useNavigate();
     const toast = useToastContext();
+    const { refreshUser } = useUser();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
@@ -66,6 +68,9 @@ function Login() {
             if (!tokenStorage.has()) {
                 throw new Error("Не удалось сохранить токен");
             }
+
+            // Обновляем данные пользователя в контексте перед навигацией
+            await refreshUser();
 
             toast.success("Успешный вход в систему");
             setLoading(false);

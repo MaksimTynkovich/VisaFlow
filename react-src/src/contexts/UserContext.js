@@ -58,9 +58,11 @@ export function UserProvider({ children }) {
   const refreshUser = async () => {
     if (!tokenStorage.has()) {
       setCurrentUser(null);
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
     try {
       const res = await apiRequest("/api/admin/me");
       if (res.ok) {
@@ -79,6 +81,8 @@ export function UserProvider({ children }) {
     } catch (error) {
       console.error("Ошибка обновления пользователя:", error);
       setCurrentUser(null);
+    } finally {
+      setLoading(false);
     }
   };
 
