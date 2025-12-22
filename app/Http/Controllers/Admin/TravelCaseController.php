@@ -54,7 +54,7 @@ class TravelCaseController extends Controller
     {
         return response()->json([
             'data' => new TravelCaseResource(
-                $travelCase->load(['visaType', 'formTemplate', 'creator', 'formResponses'])
+                $travelCase->load(['visaType', 'formTemplate', 'creator', 'formResponses.files'])
             ),
         ]);
     }

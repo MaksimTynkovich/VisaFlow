@@ -9,6 +9,7 @@ const FIELD_TYPES = [
   { value: "date", label: "Дата" },
   { value: "select", label: "Выбор" },
   { value: "textarea", label: "Многострочный текст" },
+  { value: "file", label: "Файл" },
 ];
 
 const CONDITION_OPERATORS = [

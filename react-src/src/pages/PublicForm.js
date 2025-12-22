@@ -10,6 +10,7 @@ function PublicForm() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [formData, setFormData] = useState({});
+  const [uploadedFiles, setUploadedFiles] = useState({}); // { fieldId: [file objects] }
   const saveTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -54,6 +55,17 @@ function PublicForm() {
           // Используем данные из последней отправки
           initialFormData = { ...initialFormData, ...submissionData.data.payload };
         }
+        // Загружаем файлы из последней отправки
+        if (submissionData.data && submissionData.data.files) {
+          const filesByField = {};
+          submissionData.data.files.forEach((file) => {
+            if (!filesByField[file.field_id]) {
+              filesByField[file.field_id] = [];
+            }
+            filesByField[file.field_id].push(file);
+          });
+          setUploadedFiles(filesByField);
+        }
       } else if (draftRes && draftRes.ok) {
         // Если нет последней отправки, используем черновик
         const draftData = await draftRes.json();
@@ -76,7 +88,12 @@ function PublicForm() {
     const initialData = {};
     if (schema && schema.fields && Array.isArray(schema.fields)) {
       schema.fields.forEach((field) => {
-        initialData[field.name || field.id] = "";
+        const fieldId = field.name || field.id;
+        if (field.type === "file") {
+          initialData[fieldId] = [];
+        } else {
+          initialData[fieldId] = "";
+        }
       });
     }
     return initialData;
@@ -144,6 +161,61 @@ function PublicForm() {
     return true;
   };
 
+  // Обработчик загрузки файлов
+  const handleFileUpload = async (fieldId, file) => {
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', file);
+      uploadFormData.append('field_id', fieldId);
+
+      const res = await fetch(apiUrl(`/api/public/form/${token}/upload-file`), {
+        method: "POST",
+        body: uploadFormData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data?.error?.message || "Ошибка при загрузке файла");
+      }
+
+      const data = await res.json();
+      const uploadedFile = {
+        id: data.data.id,
+        original_name: data.data.original_name,
+        file_size: data.data.file_size,
+        url: data.data.url,
+      };
+
+      // Добавляем файл в список загруженных для этого поля
+      setUploadedFiles((prev) => {
+        const fieldFiles = prev[fieldId] || [];
+        return { ...prev, [fieldId]: [...fieldFiles, uploadedFile] };
+      });
+
+      // Обновляем formData для этого поля
+      const currentFiles = formData[fieldId] || [];
+      setFormData((prev) => ({
+        ...prev,
+        [fieldId]: [...currentFiles, uploadedFile.id],
+      }));
+    } catch (e) {
+      setError(e.message || "Ошибка при загрузке файла");
+    }
+  };
+
+  // Обработчик удаления файла
+  const handleFileRemove = (fieldId, fileId) => {
+    setUploadedFiles((prev) => {
+      const fieldFiles = prev[fieldId] || [];
+      return { ...prev, [fieldId]: fieldFiles.filter((f) => f.id !== fileId) };
+    });
+
+    setFormData((prev) => {
+      const fieldFiles = prev[fieldId] || [];
+      return { ...prev, [fieldId]: fieldFiles.filter((id) => id !== fileId) };
+    });
+  };
+
   // Обработчик изменения полей формы
   const handleFieldChange = (fieldName, value) => {
     const newFormData = { ...formData, [fieldName]: value };
@@ -170,6 +242,14 @@ function PublicForm() {
           // Если поле должно быть скрыто, очищаем его значение
           if (!shouldBeVisible && newFormData[fieldId]) {
             delete newFormData[fieldId];
+            // Также очищаем загруженные файлы для этого поля
+            if (field.type === "file") {
+              setUploadedFiles((prev) => {
+                const newFiles = { ...prev };
+                delete newFiles[fieldId];
+                return newFiles;
+              });
+            }
           }
         }
       });
@@ -190,6 +270,11 @@ function PublicForm() {
     }
 
     try {
+      // Собираем все ID загруженных файлов
+      const fileIds = Object.values(uploadedFiles)
+        .flat()
+        .map((file) => file.id);
+
       const res = await fetch(apiUrl(`/api/public/form/${token}/submit`), {
         method: "POST",
         headers: {
@@ -198,6 +283,7 @@ function PublicForm() {
         },
         body: JSON.stringify({
           payload: formData,
+          file_ids: fileIds,
         }),
       });
 
@@ -260,7 +346,74 @@ function PublicForm() {
                 {field.required && <span className="text-red-500 ml-1">*</span>}
               </label>
               
-              {field.type === "select" ? (
+              {field.type === "file" ? (
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        handleFileUpload(fieldId, file);
+                      }
+                      e.target.value = ""; // Сбрасываем input для возможности повторной загрузки того же файла
+                    }}
+                    className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600"
+                    required={field.required && (!formData[fieldId] || formData[fieldId].length === 0)}
+                    accept={field.accept || "*/*"}
+                  />
+                  {uploadedFiles[fieldId] && uploadedFiles[fieldId].length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {uploadedFiles[fieldId].map((file) => (
+                        <div
+                          key={file.id}
+                          className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-md p-2"
+                        >
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            <svg
+                              className="w-5 h-5 text-blue-500 flex-shrink-0"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                              />
+                            </svg>
+                            <span className="text-sm text-blue-700 truncate">
+                              {file.original_name}
+                            </span>
+                            <span className="text-xs text-blue-400 flex-shrink-0">
+                              ({(file.file_size / 1024).toFixed(2)} KB)
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleFileRemove(fieldId, file.id)}
+                            className="ml-2 text-red-500 hover:text-red-700 flex-shrink-0"
+                          >
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : field.type === "select" ? (
                 <select
                   value={formData[fieldId] || ""}
                   onChange={(e) => handleFieldChange(fieldId, e.target.value)}

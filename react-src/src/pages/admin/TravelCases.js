@@ -555,11 +555,113 @@ function TravelCaseView({ travelCase, onClose }) {
                       ? new Date(response.submitted_at).toLocaleString("ru-RU")
                       : new Date(response.created_at).toLocaleString("ru-RU")}
                   </div>
-                  <div className="bg-white p-3 rounded overflow-x-auto">
+                  <div className="bg-white p-3 rounded overflow-x-auto mb-3">
                     <pre className="text-sm text-blue-700 max-w-full break-words whitespace-pre-wrap">
                       {JSON.stringify(response.payload, null, 2)}
                     </pre>
                   </div>
+                  
+                  {/* Файлы */}
+                  {response.files && response.files.length > 0 && (
+                    <div className="mt-3">
+                      <h4 className="text-sm font-semibold text-blue-700 mb-2">
+                        Загруженные файлы:
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {response.files.map((file) => {
+                          const isImage = file.mime_type?.startsWith('image/');
+                          const fileSizeKB = file.file_size
+                            ? (file.file_size / 1024).toFixed(2)
+                            : '0';
+                          
+                          return (
+                            <div
+                              key={file.id}
+                              className="bg-white border border-blue-200 rounded-lg p-3"
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-blue-700 truncate">
+                                    {file.original_name}
+                                  </p>
+                                  <p className="text-xs text-blue-400">
+                                    {fileSizeKB} KB
+                                  </p>
+                                  {file.field_id && (
+                                    <p className="text-xs text-blue-400 mt-1">
+                                      Поле: {file.field_id}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {isImage ? (
+                                <div className="mb-2">
+                                  <img
+                                    src={file.url}
+                                    alt={file.original_name}
+                                    className="w-full h-32 object-cover rounded border border-blue-200 cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => window.open(file.url, '_blank')}
+                                    onError={(e) => {
+                                      e.target.style.display = 'none';
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="mb-2 flex items-center justify-center h-32 bg-blue-50 rounded border border-blue-200">
+                                  <svg
+                                    className="w-12 h-12 text-blue-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                    />
+                                  </svg>
+                                </div>
+                              )}
+                              
+                              <div className="flex gap-2">
+                                <a
+                                  href={file.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex-1 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded text-center transition-colors"
+                                >
+                                  {isImage ? 'Открыть' : 'Скачать'}
+                                </a>
+                                <button
+                                  onClick={() => {
+                                    window.open(file.url, '_blank');
+                                  }}
+                                  className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition-colors"
+                                  title="Открыть в новой вкладке"
+                                >
+                                  <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -63,7 +63,15 @@ function FormPreview({ schema }) {
                   {field.required && <span className="text-red-500 ml-1">*</span>}
                 </label>
 
-                {field.type === "select" ? (
+                {field.type === "file" ? (
+                  <input
+                    type="file"
+                    className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600"
+                    required={field.required}
+                    accept={field.accept || "*/*"}
+                    disabled
+                  />
+                ) : field.type === "select" ? (
                   <select
                     value={formData[fieldId] || ""}
                     onChange={(e) => handleFieldChange(fieldId, e.target.value)}

@@ -10,6 +10,8 @@ Route::post('/admin/auth/login', [AuthController::class, 'login']);
 // Публичные роуты для форм
 Route::get('/public/form/{token}', [PublicFormController::class, 'show']);
 Route::get('/public/form/{token}/last-submission', [PublicFormController::class, 'getLastSubmission']);
+Route::post('/public/form/{token}/upload-file', [PublicFormController::class, 'uploadFile']);
+Route::get('/public/form/file/{fileId}', [PublicFormController::class, 'getFile']);
 Route::post('/public/form/{token}/submit', [PublicFormController::class, 'submit']);
 
 // Публичные роуты для черновиков форм
