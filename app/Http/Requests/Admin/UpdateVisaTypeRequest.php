@@ -16,7 +16,8 @@ class UpdateVisaTypeRequest extends FormRequest
 
     public function rules(): array
     {
-        $visaTypeId = $this->route('visaType');
+        $visaType = $this->route('visa_type');
+        $visaTypeId = $visaType instanceof \App\Models\VisaType ? $visaType->id : $visaType;
 
         return [
             'code' => [
