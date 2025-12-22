@@ -20,11 +20,14 @@ function PublicForm() {
     setLoading(true);
     setError("");
     try {
-      // Загружаем форму и черновик параллельно
-      const [formRes, draftRes] = await Promise.all([
+      // Загружаем форму, последнюю отправку и черновик параллельно
+      const [formRes, lastSubmissionRes, draftRes] = await Promise.all([
         fetch(apiUrl(`/api/public/form/${token}`), {
           headers: { Accept: "application/json" },
         }),
+        fetch(apiUrl(`/api/public/form/${token}/last-submission`), {
+          headers: { Accept: "application/json" },
+        }).catch(() => null), // Игнорируем ошибки загрузки последней отправки
         fetch(apiUrl(`/api/public/form/${token}/draft`), {
           headers: { Accept: "application/json" },
         }).catch(() => null), // Игнорируем ошибки загрузки черновика
@@ -44,11 +47,17 @@ function PublicForm() {
         initialFormData = initializeFormData(formData.data.form_template.schema);
       }
 
-      // Если есть черновик, загружаем его данные
-      if (draftRes && draftRes.ok) {
+      // Приоритет: последняя отправка > черновик > пустая форма
+      if (lastSubmissionRes && lastSubmissionRes.ok) {
+        const submissionData = await lastSubmissionRes.json();
+        if (submissionData.data && submissionData.data.payload) {
+          // Используем данные из последней отправки
+          initialFormData = { ...initialFormData, ...submissionData.data.payload };
+        }
+      } else if (draftRes && draftRes.ok) {
+        // Если нет последней отправки, используем черновик
         const draftData = await draftRes.json();
         if (draftData.data && draftData.data.form_data) {
-          // Объединяем данные схемы с черновиком
           initialFormData = { ...initialFormData, ...draftData.data.form_data };
         }
       }
