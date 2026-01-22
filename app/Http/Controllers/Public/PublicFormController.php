@@ -255,9 +255,43 @@ class PublicFormController extends Controller
 
         // Связываем загруженные файлы с ответом
         if ($request->has('file_ids') && is_array($request->input('file_ids'))) {
-            FormFile::whereIn('id', $request->input('file_ids'))
-                ->whereNull('form_response_id') // Только временные файлы
-                ->update(['form_response_id' => $formResponse->id]);
+            $fileIds = $request->input('file_ids');
+            
+            // Получаем файлы, которые нужно привязать
+            $filesToAttach = FormFile::whereIn('id', $fileIds)->get();
+            
+            foreach ($filesToAttach as $file) {
+                if ($file->form_response_id === null) {
+                    // Временный файл - просто привязываем к новому ответу
+                    $file->update(['form_response_id' => $formResponse->id]);
+                } else {
+                    // Файл уже привязан к предыдущему ответу - создаём копию для нового ответа
+                    $existingResponse = $file->formResponse;
+                    if ($existingResponse && $existingResponse->travel_case_id === $travelCase->id) {
+                        // Проверяем, что файл существует
+                        if (Storage::disk('public')->exists($file->file_path)) {
+                            // Создаём копию файла
+                            $originalPath = $file->file_path;
+                            $pathInfo = pathinfo($originalPath);
+                            $newFileName = Str::uuid() . '.' . ($pathInfo['extension'] ?? '');
+                            $newFilePath = 'form-files/' . $travelCase->id . '/' . $newFileName;
+                            
+                            // Копируем файл
+                            Storage::disk('public')->copy($originalPath, $newFilePath);
+                            
+                            // Создаём новую запись о файле для нового ответа
+                            FormFile::create([
+                                'form_response_id' => $formResponse->id,
+                                'field_id' => $file->field_id,
+                                'original_name' => $file->original_name,
+                                'file_path' => $newFilePath,
+                                'mime_type' => $file->mime_type,
+                                'file_size' => $file->file_size,
+                            ]);
+                        }
+                    }
+                }
+            }
 
             // Удаляем временные файлы, которые не были использованы
             FormFile::whereNull('form_response_id')
