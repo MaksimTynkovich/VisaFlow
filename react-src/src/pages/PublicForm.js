@@ -67,6 +67,13 @@ function PublicForm() {
               filesByField[file.field_id].push(file);
             });
             setUploadedFiles(filesByField);
+            
+            // Синхронизируем formData с uploadedFiles - обновляем ID файлов в formData
+            // Это важно, чтобы formData содержал только те файлы, которые реально загружены
+            Object.keys(filesByField).forEach((fieldId) => {
+              const fileIds = filesByField[fieldId].map((file) => file.id);
+              initialFormData[fieldId] = fileIds;
+            });
           }
         }
       }
@@ -213,6 +220,7 @@ function PublicForm() {
         id: data.data.id,
         original_name: data.data.original_name,
         file_size: data.data.file_size,
+        mime_type: data.data.mime_type,
         url: data.data.url,
       };
 
@@ -300,10 +308,32 @@ function PublicForm() {
     }
 
     try {
-      // Собираем все ID загруженных файлов
-      const fileIds = Object.values(uploadedFiles)
-        .flat()
-        .map((file) => file.id);
+      // Собираем ID файлов только из formData (только те, которые указаны в форме)
+      // И дополнительно проверяем, что файлы действительно есть в uploadedFiles
+      // Файловые поля в formData содержат массивы ID файлов
+      const fileIds = [];
+      Object.keys(formData).forEach((fieldId) => {
+        const fieldValue = formData[fieldId];
+        // Если значение - массив чисел, это файловое поле
+        if (Array.isArray(fieldValue) && fieldValue.length > 0) {
+          // Проверяем, что все элементы массива - числа (ID файлов)
+          const ids = fieldValue.filter((id) => {
+            // Фильтруем только валидные ID (числа или строки-числа)
+            const numId = typeof id === 'number' ? id : (typeof id === 'string' && !isNaN(id) ? parseInt(id, 10) : null);
+            if (numId === null || numId <= 0) {
+              return false;
+            }
+            // Дополнительно проверяем, что файл действительно есть в uploadedFiles
+            // Это гарантирует, что удаленные файлы не будут отправлены
+            const fieldFiles = uploadedFiles[fieldId] || [];
+            return fieldFiles.some((file) => file.id === numId);
+          });
+          fileIds.push(...ids.map((id) => parseInt(id, 10)));
+        }
+      });
+      
+      // Удаляем дубликаты
+      const uniqueFileIds = [...new Set(fileIds)];
 
       const res = await fetch(apiUrl(`/api/public/form/${token}/submit`), {
         method: "POST",
@@ -313,7 +343,7 @@ function PublicForm() {
         },
         body: JSON.stringify({
           payload: formData,
-          file_ids: fileIds,
+          file_ids: uniqueFileIds,
         }),
       });
 
@@ -392,54 +422,168 @@ function PublicForm() {
                     accept={field.accept || "*/*"}
                   />
                   {uploadedFiles[fieldId] && uploadedFiles[fieldId].length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {uploadedFiles[fieldId].map((file) => (
-                        <div
-                          key={file.id}
-                          className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-md p-2"
-                        >
-                          <div className="flex items-center space-x-2 flex-1 min-w-0">
-                            <svg
-                              className="w-5 h-5 text-blue-500 flex-shrink-0"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                              />
-                            </svg>
-                            <span className="text-sm text-blue-700 truncate">
-                              {file.original_name}
-                            </span>
-                            <span className="text-xs text-blue-400 flex-shrink-0">
-                              ({(file.file_size / 1024).toFixed(2)} KB)
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleFileRemove(fieldId, file.id)}
-                            className="ml-2 text-red-500 hover:text-red-700 flex-shrink-0"
+                    <div className="mt-2 space-y-2">
+                      {uploadedFiles[fieldId].map((file) => {
+                        const isImage = file.mime_type?.startsWith('image/') || file.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                        const fileSizeKB = file.file_size ? (file.file_size / 1024).toFixed(2) : '0';
+                        
+                        return (
+                          <div
+                            key={file.id}
+                            className="bg-blue-50 border border-blue-200 rounded-md p-3"
                           >
-                            <svg
-                              className="w-5 h-5"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M6 18L18 6M6 6l12 12"
-                              />
-                            </svg>
-                          </button>
-                        </div>
-                      ))}
+                            {isImage && file.url ? (
+                              <div className="space-y-2">
+                                <div className="relative group">
+                                  <img
+                                    src={file.url}
+                                    alt={file.original_name}
+                                    className="w-full h-48 object-contain rounded-md border border-blue-200 bg-white"
+                                    onError={(e) => {
+                                      // Если изображение не загрузилось, скрываем превью
+                                      e.target.style.display = 'none';
+                                    }}
+                                  />
+                                  <a
+                                    href={file.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity rounded-md"
+                                  >
+                                    <svg
+                                      className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"
+                                      />
+                                    </svg>
+                                  </a>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2 flex-1 min-w-0">
+                                    <svg
+                                      className="w-4 h-4 text-blue-500 flex-shrink-0"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                      />
+                                    </svg>
+                                    <span className="text-sm text-blue-700 truncate">
+                                      {file.original_name}
+                                    </span>
+                                    <span className="text-xs text-blue-400 flex-shrink-0">
+                                      ({fileSizeKB} KB)
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleFileRemove(fieldId, file.id)}
+                                    className="ml-2 text-red-500 hover:text-red-700 flex-shrink-0"
+                                    title="Удалить файл"
+                                  >
+                                    <svg
+                                      className="w-5 h-5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2 flex-1 min-w-0">
+                                  <svg
+                                    className="w-5 h-5 text-blue-500 flex-shrink-0"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                    />
+                                  </svg>
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-sm text-blue-700 truncate block">
+                                      {file.original_name}
+                                    </span>
+                                    <span className="text-xs text-blue-400">
+                                      {fileSizeKB} KB
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  {file.url && (
+                                    <a
+                                      href={file.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-500 hover:text-blue-700 flex-shrink-0"
+                                      title="Открыть файл"
+                                    >
+                                      <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                        />
+                                      </svg>
+                                    </a>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleFileRemove(fieldId, file.id)}
+                                    className="text-red-500 hover:text-red-700 flex-shrink-0"
+                                    title="Удалить файл"
+                                  >
+                                    <svg
+                                      className="w-5 h-5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
