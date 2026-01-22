@@ -176,6 +176,25 @@ class PublicFormController extends Controller
     }
 
     /**
+     * Получить информацию о файле по ID.
+     */
+    public function getFileInfo(int $fileId): JsonResponse
+    {
+        $formFile = FormFile::findOrFail($fileId);
+
+        return response()->json([
+            'data' => [
+                'id' => $formFile->id,
+                'field_id' => $formFile->field_id,
+                'original_name' => $formFile->original_name,
+                'file_size' => $formFile->file_size,
+                'mime_type' => $formFile->mime_type,
+                'url' => url("/api/public/form/file/{$formFile->id}"),
+            ],
+        ]);
+    }
+
+    /**
      * Получить файл по ID.
      */
     public function getFile(int $fileId)

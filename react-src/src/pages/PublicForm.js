@@ -28,10 +28,10 @@ function PublicForm() {
         }),
         fetch(apiUrl(`/api/public/form/${token}/last-submission`), {
           headers: { Accept: "application/json" },
-        }).catch(() => null), // Игнорируем ошибки загрузки последней отправки
+        }).catch(() => ({ ok: false })), // Игнорируем ошибки загрузки последней отправки
         fetch(apiUrl(`/api/public/form/${token}/draft`), {
           headers: { Accept: "application/json" },
-        }).catch(() => null), // Игнорируем ошибки загрузки черновика
+        }).catch(() => ({ ok: false })), // Игнорируем ошибки загрузки черновика
       ]);
 
       if (!formRes.ok) {
@@ -49,28 +49,58 @@ function PublicForm() {
       }
 
       // Приоритет: последняя отправка > черновик > пустая форма
+      let hasLastSubmission = false;
       if (lastSubmissionRes && lastSubmissionRes.ok) {
         const submissionData = await lastSubmissionRes.json();
-        if (submissionData.data && submissionData.data.payload) {
+        // Проверяем, что данные действительно есть (не null)
+        if (submissionData.data !== null && submissionData.data && submissionData.data.payload) {
           // Используем данные из последней отправки
+          hasLastSubmission = true;
           initialFormData = { ...initialFormData, ...submissionData.data.payload };
+          // Загружаем файлы из последней отправки
+          if (submissionData.data.files) {
+            const filesByField = {};
+            submissionData.data.files.forEach((file) => {
+              if (!filesByField[file.field_id]) {
+                filesByField[file.field_id] = [];
+              }
+              filesByField[file.field_id].push(file);
+            });
+            setUploadedFiles(filesByField);
+          }
         }
-        // Загружаем файлы из последней отправки
-        if (submissionData.data && submissionData.data.files) {
-          const filesByField = {};
-          submissionData.data.files.forEach((file) => {
-            if (!filesByField[file.field_id]) {
-              filesByField[file.field_id] = [];
-            }
-            filesByField[file.field_id].push(file);
-          });
-          setUploadedFiles(filesByField);
-        }
-      } else if (draftRes && draftRes.ok) {
-        // Если нет последней отправки, используем черновик
+      }
+      
+      // Если нет последней отправки с данными, используем черновик
+      if (!hasLastSubmission && draftRes && draftRes.ok) {
         const draftData = await draftRes.json();
-        if (draftData.data && draftData.data.form_data) {
-          initialFormData = { ...initialFormData, ...draftData.data.form_data };
+        if (draftData.data !== null && draftData.data && draftData.data.form_data) {
+          // Применяем данные из черновика поверх инициализированных данных
+          // Фильтруем только null и undefined значения, остальное применяем
+          const draftFormData = draftData.data.form_data;
+          const filteredDraftData = {};
+          Object.keys(draftFormData).forEach((key) => {
+            const value = draftFormData[key];
+            // Применяем значение, если оно не null и не undefined
+            if (value !== null && value !== undefined) {
+              filteredDraftData[key] = value;
+            }
+          });
+          
+          // Объединяем данные: сначала инициализированные, потом из черновика
+          initialFormData = { ...initialFormData, ...filteredDraftData };
+          
+          // Загружаем файлы из черновика
+          if (draftData.data.files && Array.isArray(draftData.data.files)) {
+            const filesByField = {};
+            draftData.data.files.forEach((file) => {
+              if (!filesByField[file.field_id]) {
+                filesByField[file.field_id] = [];
+              }
+              filesByField[file.field_id].push(file);
+            });
+            setUploadedFiles(filesByField);
+          }
         }
       }
 
