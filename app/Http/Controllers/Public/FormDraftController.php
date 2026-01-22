@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
+use App\Models\FormFile;
 use App\Services\Public\FormDraftService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -59,10 +60,41 @@ class FormDraftController extends Controller
             ], 200);
         }
 
+        // Собираем все ID файлов из form_data
+        $fileIds = [];
+        if (is_array($draft->form_data)) {
+            foreach ($draft->form_data as $fieldValue) {
+                if (is_array($fieldValue)) {
+                    // Фильтруем только числовые ID
+                    $fileIds = array_merge($fileIds, array_filter($fieldValue, 'is_numeric'));
+                }
+            }
+        }
+
+        // Удаляем дубликаты и преобразуем в целые числа
+        $fileIds = array_unique(array_map('intval', $fileIds));
+
+        // Загружаем информацию о файлах
+        $files = [];
+        if (!empty($fileIds)) {
+            $formFiles = FormFile::whereIn('id', $fileIds)->get();
+            foreach ($formFiles as $file) {
+                $files[] = [
+                    'id' => $file->id,
+                    'field_id' => $file->field_id,
+                    'original_name' => $file->original_name,
+                    'file_size' => $file->file_size,
+                    'mime_type' => $file->mime_type,
+                    'url' => url("/api/public/form/file/{$file->id}"),
+                ];
+            }
+        }
+
         return response()->json([
             'data' => [
                 'id' => $draft->id,
                 'form_data' => $draft->form_data,
+                'files' => $files,
                 'updated_at' => $draft->updated_at,
             ],
         ]);
