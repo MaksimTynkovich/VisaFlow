@@ -16,6 +16,7 @@ function PublicForm() {
   const [uploadingFiles, setUploadingFiles] = useState({}); // { fieldId: true/false }
   const [currentStep, setCurrentStep] = useState(0); // Текущий шаг формы
   const [formSteps, setFormSteps] = useState([]); // Разбитые на шаги поля
+  const [dragActive, setDragActive] = useState({}); // { fieldId: true/false } - состояние drag для каждого поля
   const saveTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -351,6 +352,27 @@ function PublicForm() {
       setError(e.message || "Ошибка при загрузке файла");
     } finally {
       setUploadingFiles((prev) => ({ ...prev, [fieldId]: false }));
+    }
+  };
+
+  // Обработчики drag and drop
+  const handleDrag = (e, fieldId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive((prev) => ({ ...prev, [fieldId]: true }));
+    } else if (e.type === "dragleave") {
+      setDragActive((prev) => ({ ...prev, [fieldId]: false }));
+    }
+  };
+
+  const handleDrop = (e, fieldId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive((prev) => ({ ...prev, [fieldId]: false }));
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(fieldId, e.dataTransfer.files[0]);
     }
   };
 
@@ -787,7 +809,20 @@ function PublicForm() {
             
             {field.type === "file" ? (
                 <div className="space-y-4">
-                  <div className="relative">
+                  {/* Drag and Drop область */}
+                  <div
+                    className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                      dragActive[fieldId]
+                        ? 'border-blue-500 bg-blue-100'
+                        : hasError
+                        ? 'border-red-400 bg-red-50'
+                        : 'border-blue-200 bg-blue-50 hover:border-blue-300 hover:bg-blue-100'
+                    }`}
+                    onDragEnter={(e) => handleDrag(e, fieldId)}
+                    onDragLeave={(e) => handleDrag(e, fieldId)}
+                    onDragOver={(e) => handleDrag(e, fieldId)}
+                    onDrop={(e) => handleDrop(e, fieldId)}
+                  >
                     <input
                       id={fieldId}
                       type="file"
@@ -798,9 +833,7 @@ function PublicForm() {
                         }
                         e.target.value = ""; // Сбрасываем input для возможности повторной загрузки того же файла
                       }}
-                      className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 placeholder:text-blue-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
-                        hasError ? 'border-red-400 bg-red-50' : 'border-blue-200'
-                      } file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-500 file:text-white hover:file:bg-blue-600 file:cursor-pointer`}
+                      className="hidden"
                       required={field.required && (!formData[fieldId] || formData[fieldId].length === 0)}
                       accept={field.accept || "*/*"}
                       aria-describedby={[
@@ -810,15 +843,43 @@ function PublicForm() {
                       aria-invalid={hasError}
                       disabled={isUploading}
                     />
-                    {isUploading && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded-lg">
-                        <div className="flex items-center space-x-2 text-blue-600">
-                          <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span className="text-base font-medium">Загрузка...</span>
+                    
+                    {isUploading ? (
+                      <div className="flex flex-col items-center justify-center space-y-3">
+                        <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="text-base font-medium text-blue-600">Загрузка файла...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center space-y-3">
+                        <svg
+                          className={`w-12 h-12 ${dragActive[fieldId] ? 'text-blue-500' : 'text-blue-400'}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                          />
+                        </svg>
+                        <div>
+                          <label
+                            htmlFor={fieldId}
+                            className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium underline"
+                          >
+                            Нажмите для выбора файла
+                          </label>
+                          <span className="text-blue-400 mx-2">или</span>
+                          <span className="text-blue-400">перетащите файл сюда</span>
                         </div>
+                        <p className="text-sm text-blue-400">
+                          Поддерживаются любые типы файлов
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1176,7 +1237,6 @@ function PublicForm() {
           )}
         </div>
 
-        {/* Индикатор шага */}
         {totalSteps > 0 && (
           <div className="mb-6 text-center">
             <span className="text-sm text-blue-400">
@@ -1185,9 +1245,8 @@ function PublicForm() {
           </div>
         )}
 
-        {/* Индикатор автосохранения */}
-        {savingStatus === 'saving' && (
-          <div className="mb-4 text-center">
+        <div className="mb-4 text-center h-6">
+          {savingStatus === 'saving' && (
             <div className="inline-flex items-center space-x-2 text-sm text-blue-400">
               <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -1195,8 +1254,8 @@ function PublicForm() {
               </svg>
               <span>Сохранение...</span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Общая ошибка */}
         {error && (
