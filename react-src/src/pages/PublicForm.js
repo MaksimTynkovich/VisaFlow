@@ -771,7 +771,7 @@ function PublicForm() {
             <label 
               id={`label-${fieldId}`}
               htmlFor={fieldId}
-              className="block text-base font-medium text-gray-900 mb-2"
+              className="block text-base font-semibold text-blue-700 mb-2"
             >
               {field.label || field.name || `Поле ${index + 1}`}
               {field.required && (
@@ -780,7 +780,7 @@ function PublicForm() {
             </label>
             
             {field.description && (
-              <p id={`desc-${fieldId}`} className="text-sm text-gray-500 mb-3">
+              <p id={`desc-${fieldId}`} className="text-sm text-blue-400 mb-3">
                 {field.description}
               </p>
             )}
@@ -798,9 +798,9 @@ function PublicForm() {
                         }
                         e.target.value = ""; // Сбрасываем input для возможности повторной загрузки того же файла
                       }}
-                      className={`w-full py-3 px-4 text-base border rounded-md bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all ${
-                        hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                      } file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-gray-900 file:text-white hover:file:bg-gray-800 file:cursor-pointer`}
+                      className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 placeholder:text-blue-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
+                        hasError ? 'border-red-400 bg-red-50' : 'border-blue-200'
+                      } file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-500 file:text-white hover:file:bg-blue-600 file:cursor-pointer`}
                       required={field.required && (!formData[fieldId] || formData[fieldId].length === 0)}
                       accept={field.accept || "*/*"}
                       aria-describedby={[
@@ -831,7 +831,7 @@ function PublicForm() {
                         return (
                           <div
                             key={file.id}
-                            className="bg-gray-50 border border-gray-200 rounded-md p-3"
+                            className="bg-blue-50 border border-blue-200 rounded-md p-3"
                           >
                             {isImage && file.url ? (
                               <div className="space-y-2">
@@ -839,7 +839,7 @@ function PublicForm() {
                                   <img
                                     src={file.url}
                                     alt={file.original_name}
-                                    className="w-full h-48 object-contain rounded-md border border-gray-200 bg-white"
+                                    className="w-full h-48 object-contain rounded-md border border-blue-200 bg-white"
                                     onError={(e) => {
                                       e.target.style.display = 'none';
                                     }}
@@ -869,7 +869,7 @@ function PublicForm() {
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center space-x-2 flex-1 min-w-0">
                                     <svg
-                                      className="w-4 h-4 text-gray-400 flex-shrink-0"
+                                      className="w-4 h-4 text-blue-500 flex-shrink-0"
                                       fill="none"
                                       stroke="currentColor"
                                       viewBox="0 0 24 24"
@@ -881,17 +881,17 @@ function PublicForm() {
                                         d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                                       />
                                     </svg>
-                                    <span className="text-sm text-gray-700 truncate">
+                                    <span className="text-sm text-blue-700 truncate">
                                       {file.original_name}
                                     </span>
-                                    <span className="text-xs text-gray-400 flex-shrink-0">
+                                    <span className="text-xs text-blue-400 flex-shrink-0">
                                       {fileSizeKB} KB
                                     </span>
                                   </div>
                                   <button
                                     type="button"
                                     onClick={() => handleFileRemove(fieldId, file.id)}
-                                    className="ml-2 p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                    className="ml-2 p-1 text-blue-400 hover:text-red-600 transition-colors"
                                     title="Удалить файл"
                                     aria-label="Удалить файл"
                                   >
@@ -915,7 +915,7 @@ function PublicForm() {
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-2 flex-1 min-w-0">
                                   <svg
-                                    className="w-4 h-4 text-gray-400 flex-shrink-0"
+                                    className="w-4 h-4 text-blue-500 flex-shrink-0"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -927,10 +927,10 @@ function PublicForm() {
                                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                                     />
                                   </svg>
-                                  <span className="text-sm text-gray-700 truncate">
+                                  <span className="text-sm text-blue-700 truncate">
                                     {file.original_name}
                                   </span>
-                                  <span className="text-xs text-gray-400 flex-shrink-0">
+                                  <span className="text-xs text-blue-400 flex-shrink-0">
                                     {fileSizeKB} KB
                                   </span>
                                 </div>
@@ -940,7 +940,7 @@ function PublicForm() {
                                       href={file.url}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                                      className="p-1 text-blue-400 hover:text-blue-600 transition-colors"
                                       title="Открыть файл"
                                       aria-label="Открыть файл"
                                     >
@@ -994,8 +994,8 @@ function PublicForm() {
                   id={fieldId}
                   value={fieldValue}
                   onChange={(e) => handleFieldChange(fieldId, e.target.value, field)}
-                  className={`w-full py-3 px-4 text-base border rounded-md bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all ${
-                    hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                  className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
+                    hasError ? 'border-red-400 bg-red-50' : 'border-blue-200'
                   }`}
                   required={field.required}
                   aria-describedby={[
@@ -1023,8 +1023,8 @@ function PublicForm() {
                   id={fieldId}
                   value={fieldValue}
                   onChange={(e) => handleFieldChange(fieldId, e.target.value, field)}
-                  className={`w-full py-3 px-4 text-base border rounded-md bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-y ${
-                    hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                  className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 placeholder:text-blue-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all resize-y ${
+                    hasError ? 'border-red-400 bg-red-50' : 'border-blue-200'
                   }`}
                   rows={field.rows || 5}
                   required={field.required}
@@ -1041,8 +1041,8 @@ function PublicForm() {
                   type={field.type || "text"}
                   value={fieldValue}
                   onChange={(e) => handleFieldChange(fieldId, e.target.value, field)}
-                  className={`w-full py-3 px-4 text-base border rounded-md bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all ${
-                    hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                  className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
+                    hasError ? 'border-red-400 bg-red-50' : 'border-blue-200'
                   }`}
                   required={field.required}
                   placeholder={field.placeholder || ""}
@@ -1070,16 +1070,16 @@ function PublicForm() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-gray-50 px-4">
-        <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 p-10 max-w-md w-full text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white px-4">
+        <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-10 max-w-md w-full text-center">
           <div className="flex justify-center mb-6">
-            <svg className="animate-spin h-12 w-12 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin h-12 w-12 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
           </div>
-          <p className="text-xl font-semibold text-gray-800">Загрузка формы...</p>
-          <p className="text-base text-gray-600 mt-2">Пожалуйста, подождите</p>
+          <p className="text-xl font-semibold text-blue-700">Загрузка формы...</p>
+          <p className="text-base text-blue-400 mt-2">Пожалуйста, подождите</p>
         </div>
       </div>
     );
@@ -1087,8 +1087,8 @@ function PublicForm() {
 
   if (error && !travelCase) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-gray-50 px-4">
-        <div className="bg-white rounded-2xl shadow-lg border-2 border-red-200 p-10 max-w-md w-full text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white px-4">
+        <div className="bg-white rounded-xl shadow-sm border border-red-200 p-10 max-w-md w-full text-center">
           <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <svg
               className="w-10 h-10 text-red-600"
@@ -1104,9 +1104,9 @@ function PublicForm() {
               />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Ошибка загрузки</h2>
+          <h2 className="text-2xl font-bold text-blue-700 mb-4">Ошибка загрузки</h2>
           <div className="text-lg text-red-600 mb-4 font-medium">{error}</div>
-          <p className="text-base text-gray-600 leading-relaxed">
+          <p className="text-base text-blue-400 leading-relaxed">
             Проверьте правильность ссылки или обратитесь к администратору.
           </p>
         </div>
@@ -1116,8 +1116,8 @@ function PublicForm() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-gray-50 px-4">
-        <div className="bg-white rounded-2xl shadow-lg border-2 border-green-200 p-10 max-w-md w-full text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white px-4">
+        <div className="bg-white rounded-xl shadow-sm border border-green-200 p-10 max-w-md w-full text-center">
           <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <svg
               className="w-12 h-12 text-green-600"
@@ -1133,13 +1133,13 @@ function PublicForm() {
               />
             </svg>
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">
+          <h2 className="text-3xl font-bold text-blue-700 mb-4">
             Форма успешно отправлена!
           </h2>
-          <p className="text-lg text-gray-700 leading-relaxed mb-6">
+          <p className="text-lg text-blue-400 leading-relaxed mb-6">
             Ваши данные получены. Мы свяжемся с вами в ближайшее время.
           </p>
-          <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
             <p className="text-base text-green-800">
               <strong>Спасибо за заполнение формы!</strong>
             </p>
@@ -1162,15 +1162,15 @@ function PublicForm() {
   const totalSteps = formSteps.length;
 
   return (
-    <div className="min-h-screen bg-white py-8 px-4 sm:py-12">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white py-8 px-4 sm:py-12">
       <div className="max-w-2xl mx-auto">
         {/* Минималистичный заголовок */}
         <div className="mb-8 text-center">
-          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-blue-700 mb-2">
             {travelCase?.form_template?.name || "Форма заявки на визу"}
           </h1>
           {travelCase?.visa_type && (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-blue-400">
               {travelCase.visa_type.name} ({travelCase.visa_type.country})
             </p>
           )}
@@ -1179,7 +1179,7 @@ function PublicForm() {
         {/* Индикатор шага */}
         {totalSteps > 0 && (
           <div className="mb-6 text-center">
-            <span className="text-sm text-gray-500">
+            <span className="text-sm text-blue-400">
               Шаг {currentStep + 1} из {totalSteps}
             </span>
           </div>
@@ -1188,7 +1188,7 @@ function PublicForm() {
         {/* Индикатор автосохранения */}
         {savingStatus === 'saving' && (
           <div className="mb-4 text-center">
-            <div className="inline-flex items-center space-x-2 text-sm text-gray-500">
+            <div className="inline-flex items-center space-x-2 text-sm text-blue-400">
               <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -1206,21 +1206,21 @@ function PublicForm() {
         )}
 
         {/* Форма */}
-        <div className="bg-white">
+        <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-6 sm:p-8">
           <form onSubmit={handleSubmit} noValidate>
             {renderFormFields()}
 
             {/* Навигация между шагами */}
             {totalSteps > 1 && (
-              <div className="mt-8 flex items-center justify-between pt-6 border-t border-gray-200">
+              <div className="mt-8 flex items-center justify-between pt-6 border-t border-blue-100">
                 <button
                   type="button"
                   onClick={prevStep}
                   disabled={isFirstStep}
                   className={`flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                     isFirstStep
-                      ? 'text-gray-300 cursor-not-allowed'
-                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                      ? 'text-blue-200 cursor-not-allowed'
+                      : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
                   }`}
                   aria-label="Предыдущий шаг"
                 >
@@ -1234,7 +1234,7 @@ function PublicForm() {
                   <button
                     type="button"
                     onClick={handleNext}
-                    className="flex items-center space-x-2 px-6 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                    className="flex items-center space-x-2 px-6 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
                     aria-label="Следующий шаг"
                   >
                     <span>Далее</span>
@@ -1246,7 +1246,7 @@ function PublicForm() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="px-6 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                    className="px-6 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
                     aria-label="Отправить форму"
                   >
                     {submitting ? "Отправка..." : "Отправить форму"}
@@ -1257,11 +1257,11 @@ function PublicForm() {
 
             {/* Кнопка отправки для формы без шагов */}
             {totalSteps <= 1 && (
-              <div className="mt-8 pt-6 border-t border-gray-200">
+              <div className="mt-8 pt-6 border-t border-blue-100">
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full px-6 py-3 bg-gray-900 text-white text-base font-medium rounded-md hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+                  className="w-full px-6 py-3 bg-blue-500 text-white text-base font-medium rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
                   aria-label="Отправить форму"
                 >
                   {submitting ? "Отправка..." : "Отправить форму"}
