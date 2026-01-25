@@ -265,7 +265,7 @@ function Home() {
 
                 {/* Footer */}
                 <div className="text-center text-blue-300 text-sm pt-8 border-t border-blue-100">
-                    <p>© 2025 VisaVisa. Все права защищены.</p>
+                    <p>© 2026 VisaVisa. Все права защищены.</p>
                 </div>
             </div>
         </div>
