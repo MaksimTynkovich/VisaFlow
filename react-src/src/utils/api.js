@@ -7,20 +7,28 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || '';
 
 /**
  * Формирует полный URL для API запроса
- * @param {string} endpoint - путь API (например, '/api/admin/auth/login')
+ * @param {string} endpoint - путь API (например, '/api/admin/auth/login' или '/admin/auth/login')
  * @returns {string} - полный URL
  */
 export const apiUrl = (endpoint) => {
-    // Убираем начальный слеш, если он есть, чтобы избежать двойных слешей
-    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    // Убираем начальный слеш, если он есть
+    let cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    
+    if (cleanEndpoint.startsWith('/api/')) {
+        cleanEndpoint = cleanEndpoint.substring(4);
+    }
 
-    // Если указан базовый URL (dev), используем его
+    // Если указан базовый URL (dev или prod с явным URL)
     if (API_BASE_URL) {
-        return `${API_BASE_URL}${cleanEndpoint}`;
+        // Убираем '/api' с конца API_BASE_URL, если он там есть
+        // Это позволяет использовать как 'http://localhost:8000', так и 'http://localhost:8000/api'
+        const baseUrl = API_BASE_URL.replace(/\/api\/?$/, '');
+        return `${baseUrl}/api${cleanEndpoint}`;
     }
 
     // Иначе используем относительный путь (prod или dev с proxy)
-    return cleanEndpoint;
+    // Laravel автоматически добавит '/api' префикс к роутам из routes/api.php
+    return `/api${cleanEndpoint}`;
 };
 
 /**
@@ -63,10 +71,8 @@ export const apiRequest = async (endpoint, options = {}) => {
     // Если токен невалиден (401), удаляем его
     if (response.status === 401) {
         tokenStorage.remove();
-        // Можно добавить редирект на страницу входа
         window.location.reload();
     }
 
     return response;
 };
-
