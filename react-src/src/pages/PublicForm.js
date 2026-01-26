@@ -11,6 +11,12 @@ function PublicForm() {
   const [success, setSuccess] = useState(false);
   const [formData, setFormData] = useState({});
   const [uploadedFiles, setUploadedFiles] = useState({}); // { fieldId: [file objects] }
+  const [fieldErrors, setFieldErrors] = useState({}); // Валидация полей
+  const [savingStatus, setSavingStatus] = useState(null); // 'saving', 'saved', null
+  const [uploadingFiles, setUploadingFiles] = useState({}); // { fieldId: true/false }
+  const [currentStep, setCurrentStep] = useState(0); // Текущий шаг формы
+  const [formSteps, setFormSteps] = useState([]); // Разбитые на шаги поля
+  const [dragActive, setDragActive] = useState({}); // { fieldId: true/false } - состояние drag для каждого поля
   const saveTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -112,12 +118,63 @@ function PublicForm() {
       }
 
       setFormData(initialFormData);
+      
+      // Разбиваем поля на шаги после загрузки
+      if (formData.data.form_template?.schema?.fields) {
+        // Используем setTimeout, чтобы убедиться, что состояние обновилось
+        setTimeout(() => {
+          organizeFieldsIntoSteps(formData.data.form_template.schema.fields);
+        }, 0);
+      }
     } catch (e) {
       setError(e.message || "Ошибка загрузки формы");
     } finally {
       setLoading(false);
     }
   };
+
+  // Организация полей в шаги (по 3 поля на шаг)
+  const organizeFieldsIntoSteps = (fields) => {
+    // Сохраняем все поля, видимость будет проверяться динамически при рендеринге
+    const steps = [];
+    const fieldsPerStep = 3; // Показываем по 3 поля на шаг
+    
+    for (let i = 0; i < fields.length; i += fieldsPerStep) {
+      steps.push(fields.slice(i, i + fieldsPerStep));
+    }
+    
+    // Если нет полей, создаем один пустой шаг
+    if (steps.length === 0) {
+      steps.push([]);
+    }
+    
+    setFormSteps(steps);
+    setCurrentStep(0);
+  };
+
+  // Инициализация шагов при загрузке формы
+  useEffect(() => {
+    if (travelCase?.form_template?.schema?.fields && formSteps.length === 0) {
+      organizeFieldsIntoSteps(travelCase.form_template.schema.fields);
+    }
+  }, [travelCase]);
+
+  // Автоматический переход к первому шагу с видимыми полями при изменении шагов
+  useEffect(() => {
+    if (formSteps.length > 0) {
+      const currentStepFields = formSteps[currentStep] || [];
+      const visibleFields = currentStepFields.filter((field) => isFieldVisible(field));
+      
+      // Если на текущем шаге нет видимых полей, переходим к первому шагу с видимыми полями
+      if (visibleFields.length === 0) {
+        const firstVisibleStep = findFirstStepWithVisibleFields();
+        if (firstVisibleStep !== currentStep && firstVisibleStep !== null) {
+          setCurrentStep(firstVisibleStep);
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formSteps.length, currentStep]);
 
   const initializeFormData = (schema) => {
     // Простая инициализация формы на основе схемы
@@ -136,11 +193,58 @@ function PublicForm() {
     return initialData;
   };
 
-  // Автосохранение черновика с debounce (тихое, без индикаторов)
+  // Валидация поля
+  const validateField = (field, value) => {
+    const errors = [];
+    
+    if (field.required && (!value || (Array.isArray(value) && value.length === 0))) {
+      errors.push("Это поле обязательно для заполнения");
+    }
+    
+    if (value && field.type === "email") {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) {
+        errors.push("Введите корректный email адрес");
+      }
+    }
+    
+    if (value && field.type === "tel") {
+      const phoneRegex = /^[\d\s\-+()]+$/;
+      if (!phoneRegex.test(value)) {
+        errors.push("Введите корректный номер телефона");
+      }
+    }
+    
+    if (value && field.type === "number") {
+      if (isNaN(value)) {
+        errors.push("Введите число");
+      }
+      if (field.min !== undefined && parseFloat(value) < field.min) {
+        errors.push(`Минимальное значение: ${field.min}`);
+      }
+      if (field.max !== undefined && parseFloat(value) > field.max) {
+        errors.push(`Максимальное значение: ${field.max}`);
+      }
+    }
+    
+    if (value && field.minLength && value.length < field.minLength) {
+      errors.push(`Минимальная длина: ${field.minLength} символов`);
+    }
+    
+    if (value && field.maxLength && value.length > field.maxLength) {
+      errors.push(`Максимальная длина: ${field.maxLength} символов`);
+    }
+    
+    return errors;
+  };
+
+  // Автосохранение черновика с индикатором
   const saveDraft = useCallback(async (data) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
+
+    setSavingStatus('saving');
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
@@ -154,8 +258,11 @@ function PublicForm() {
             form_data: data,
           }),
         });
+        // Убираем индикатор сохранения после успешного сохранения
+        setSavingStatus(null);
       } catch (e) {
         console.error("Ошибка автосохранения:", e);
+        setSavingStatus(null);
       }
     }, 2000); // Сохраняем через 2 секунды после последнего изменения
   }, [token]);
@@ -200,6 +307,9 @@ function PublicForm() {
 
   // Обработчик загрузки файлов
   const handleFileUpload = async (fieldId, file) => {
+    setUploadingFiles((prev) => ({ ...prev, [fieldId]: true }));
+    setError("");
+    
     try {
       const uploadFormData = new FormData();
       uploadFormData.append('file', file);
@@ -232,12 +342,37 @@ function PublicForm() {
 
       // Обновляем formData для этого поля
       const currentFiles = formData[fieldId] || [];
-      setFormData((prev) => ({
-        ...prev,
+      const newFormData = {
+        ...formData,
         [fieldId]: [...currentFiles, uploadedFile.id],
-      }));
+      };
+      setFormData(newFormData);
+      saveDraft(newFormData);
     } catch (e) {
       setError(e.message || "Ошибка при загрузке файла");
+    } finally {
+      setUploadingFiles((prev) => ({ ...prev, [fieldId]: false }));
+    }
+  };
+
+  // Обработчики drag and drop
+  const handleDrag = (e, fieldId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive((prev) => ({ ...prev, [fieldId]: true }));
+    } else if (e.type === "dragleave") {
+      setDragActive((prev) => ({ ...prev, [fieldId]: false }));
+    }
+  };
+
+  const handleDrop = (e, fieldId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive((prev) => ({ ...prev, [fieldId]: false }));
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(fieldId, e.dataTransfer.files[0]);
     }
   };
 
@@ -255,8 +390,17 @@ function PublicForm() {
   };
 
   // Обработчик изменения полей формы
-  const handleFieldChange = (fieldName, value) => {
+  const handleFieldChange = (fieldName, value, field) => {
     const newFormData = { ...formData, [fieldName]: value };
+    
+    // Валидация в реальном времени
+    if (field) {
+      const errors = validateField(field, value);
+      setFieldErrors((prev) => ({
+        ...prev,
+        [fieldName]: errors.length > 0 ? errors : undefined,
+      }));
+    }
     
     // Очищаем значения полей, которые стали скрытыми из-за изменения
     if (travelCase?.form_template?.schema?.fields) {
@@ -280,6 +424,12 @@ function PublicForm() {
           // Если поле должно быть скрыто, очищаем его значение
           if (!shouldBeVisible && newFormData[fieldId]) {
             delete newFormData[fieldId];
+            // Очищаем ошибки для скрытого поля
+            setFieldErrors((prev) => {
+              const newErrors = { ...prev };
+              delete newErrors[fieldId];
+              return newErrors;
+            });
             // Также очищаем загруженные файлы для этого поля
             if (field.type === "file") {
               setUploadedFiles((prev) => {
@@ -305,6 +455,37 @@ function PublicForm() {
     // Отменяем отложенное автосохранение
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Валидация всех полей перед отправкой
+    const validationErrors = {};
+    if (travelCase?.form_template?.schema?.fields) {
+      const visibleFields = travelCase.form_template.schema.fields.filter((field) => 
+        isFieldVisible(field)
+      );
+      
+      visibleFields.forEach((field) => {
+        const fieldId = field.name || field.id;
+        const errors = validateField(field, formData[fieldId]);
+        if (errors.length > 0) {
+          validationErrors[fieldId] = errors;
+        }
+      });
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      setError("Пожалуйста, исправьте ошибки в форме перед отправкой");
+      setSubmitting(false);
+      
+      // Прокручиваем к первой ошибке
+      const firstErrorField = Object.keys(validationErrors)[0];
+      const errorElement = document.getElementById(firstErrorField);
+      if (errorElement) {
+        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        errorElement.focus();
+      }
+      return;
     }
 
     try {
@@ -381,51 +562,332 @@ function PublicForm() {
     };
   }, []);
 
+  // Найти следующий шаг с видимыми полями
+  const findNextStepWithVisibleFields = (startStep) => {
+    if (startStep >= formSteps.length - 1) {
+      return null; // Уже на последнем шаге
+    }
+    
+    for (let i = startStep + 1; i < formSteps.length; i++) {
+      const stepFields = formSteps[i] || [];
+      if (stepFields.length === 0) continue;
+      
+      const visibleFields = stepFields.filter((field) => {
+        if (!field) return false;
+        return isFieldVisible(field);
+      });
+      
+      if (visibleFields.length > 0) {
+        return i;
+      }
+    }
+    return null; // Нет следующего шага с видимыми полями
+  };
+
+  // Найти предыдущий шаг с видимыми полями
+  const findPrevStepWithVisibleFields = (startStep) => {
+    for (let i = startStep - 1; i >= 0; i--) {
+      const stepFields = formSteps[i] || [];
+      const visibleFields = stepFields.filter((field) => isFieldVisible(field));
+      if (visibleFields.length > 0) {
+        return i;
+      }
+    }
+    return null; // Нет предыдущего шага с видимыми полями
+  };
+
+  // Найти первый шаг с видимыми полями
+  const findFirstStepWithVisibleFields = () => {
+    for (let i = 0; i < formSteps.length; i++) {
+      const stepFields = formSteps[i] || [];
+      const visibleFields = stepFields.filter((field) => isFieldVisible(field));
+      if (visibleFields.length > 0) {
+        return i;
+      }
+    }
+    return 0;
+  };
+
+  // Найти последний шаг с видимыми полями
+  const findLastStepWithVisibleFields = () => {
+    for (let i = formSteps.length - 1; i >= 0; i--) {
+      const stepFields = formSteps[i] || [];
+      const visibleFields = stepFields.filter((field) => isFieldVisible(field));
+      if (visibleFields.length > 0) {
+        return i;
+      }
+    }
+    return 0;
+  };
+
+  // Навигация между шагами
+  const nextStep = () => {
+    const nextStepIndex = findNextStepWithVisibleFields(currentStep);
+    if (nextStepIndex !== null) {
+      setCurrentStep(nextStepIndex);
+      // Прокручиваем вверх при переходе
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const prevStep = () => {
+    const prevStepIndex = findPrevStepWithVisibleFields(currentStep);
+    if (prevStepIndex !== null) {
+      setCurrentStep(prevStepIndex);
+      // Прокручиваем вверх при переходе
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Валидация текущего шага перед переходом
+  const validateCurrentStep = () => {
+    if (currentStep >= formSteps.length) return true;
+    
+    const stepFields = formSteps[currentStep];
+    const errors = {};
+    let hasErrors = false;
+    
+    stepFields.forEach((field) => {
+      const fieldId = field.name || field.id;
+      if (isFieldVisible(field)) {
+        const fieldErrors = validateField(field, formData[fieldId]);
+        if (fieldErrors.length > 0) {
+          errors[fieldId] = fieldErrors;
+          hasErrors = true;
+        }
+      }
+    });
+    
+    if (hasErrors) {
+      setFieldErrors((prev) => ({ ...prev, ...errors }));
+    }
+    
+    return !hasErrors;
+  };
+
+  const handleNext = (e) => {
+    // Предотвращаем отправку формы, если это случайно произошло
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    if (validateCurrentStep()) {
+      // Проверяем, есть ли следующий шаг с видимыми полями
+      const nextStepIndex = findNextStepWithVisibleFields(currentStep);
+      if (nextStepIndex !== null && nextStepIndex < formSteps.length) {
+        // Есть следующий шаг - переходим на него
+        setCurrentStep(nextStepIndex);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      // Если nextStepIndex === null, значит это действительно последний шаг
+      // Остаёмся на текущем шаге, кнопка "Отправить форму" будет показана
+    } else {
+      // Прокручиваем к первой ошибке
+      const firstErrorField = Object.keys(fieldErrors).find(
+        (fieldId) => fieldErrors[fieldId] && fieldErrors[fieldId].length > 0
+      );
+      if (firstErrorField) {
+        const errorElement = document.getElementById(firstErrorField);
+        if (errorElement) {
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          errorElement.focus();
+        }
+      }
+    }
+  };
+
+  // Расчет прогресса заполнения формы
+  const calculateProgress = () => {
+    if (!travelCase?.form_template?.schema?.fields) return 0;
+    
+    const visibleFields = travelCase.form_template.schema.fields.filter((field) => 
+      isFieldVisible(field)
+    );
+    
+    if (visibleFields.length === 0) return 100;
+    
+    let filledFields = 0;
+    visibleFields.forEach((field) => {
+      const fieldId = field.name || field.id;
+      const value = formData[fieldId];
+      
+      if (field.required) {
+        if (field.type === "file") {
+          if (value && Array.isArray(value) && value.length > 0) {
+            filledFields++;
+          }
+        } else if (value !== undefined && value !== null && value !== "") {
+          filledFields++;
+        }
+      } else {
+        // Для необязательных полей считаем заполненными, если есть значение
+        if (value !== undefined && value !== null && value !== "") {
+          filledFields++;
+        }
+      }
+    });
+    
+    return Math.round((filledFields / visibleFields.length) * 100);
+  };
+
   const renderFormFields = () => {
     if (!travelCase?.form_template?.schema) {
       return (
-        <div className="text-blue-400 text-center py-8">
+        <div className="text-gray-700 text-center py-12 text-lg">
           Схема формы не настроена. Обратитесь к администратору.
         </div>
       );
     }
 
-    const schema = travelCase.form_template.schema;
+    // Если шаги еще не организованы, показываем все поля
+    if (formSteps.length === 0) {
+      return (
+        <div className="text-gray-700 text-center py-12 text-lg">
+          Загрузка полей формы...
+        </div>
+      );
+    }
 
-    // Если есть структурированные поля
-    if (schema.fields && Array.isArray(schema.fields)) {
-      return schema.fields
-        .filter((field) => isFieldVisible(field)) // Фильтруем поля по условиям
-        .map((field, index) => {
-          const fieldId = field.name || field.id || `field_${index}`;
-          
-          return (
-            <div key={fieldId} className="mb-4">
-              <label className="block text-sm font-medium text-blue-700 mb-1">
-                {field.label || field.name || `Поле ${index + 1}`}
-                {field.required && <span className="text-red-500 ml-1">*</span>}
-              </label>
-              
-              {field.type === "file" ? (
-                <div className="space-y-2">
-                  <input
-                    type="file"
-                    onChange={(e) => {
-                      const file = e.target.files[0];
-                      if (file) {
-                        handleFileUpload(fieldId, file);
-                      }
-                      e.target.value = ""; // Сбрасываем input для возможности повторной загрузки того же файла
-                    }}
-                    className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600"
-                    required={field.required && (!formData[fieldId] || formData[fieldId].length === 0)}
-                    accept={field.accept || "*/*"}
-                  />
+    // Показываем только поля текущего шага
+    const currentStepFields = formSteps[currentStep] || [];
+    const visibleFields = currentStepFields.filter((field) => isFieldVisible(field));
+    
+    // Если на текущем шаге нет видимых полей, автоматически переходим к следующему шагу с видимыми полями
+    if (visibleFields.length === 0) {
+      const nextStepIndex = findNextStepWithVisibleFields(currentStep);
+      if (nextStepIndex !== null) {
+        // Используем setTimeout, чтобы избежать проблем с рендерингом
+        setTimeout(() => {
+          setCurrentStep(nextStepIndex);
+        }, 0);
+        return (
+          <div className="text-gray-700 text-center py-12 text-lg">
+            Переход к следующему шагу...
+          </div>
+        );
+      } else {
+        // Если нет следующего шага, значит это действительно последний шаг
+        return (
+          <div className="text-gray-700 text-center py-12 text-lg">
+            Все поля заполнены.
+          </div>
+        );
+      }
+    }
+    
+    return visibleFields.map((field, index) => {
+        const fieldId = field.name || field.id || `field_${index}`;
+        const fieldValue = formData[fieldId] || "";
+        const errors = fieldErrors[fieldId];
+        const hasError = errors && errors.length > 0;
+        const isUploading = uploadingFiles[fieldId];
+        
+        return (
+          <div 
+            key={fieldId} 
+            className="mb-6"
+            role="group"
+            aria-labelledby={`label-${fieldId}`}
+          >
+            <label 
+              id={`label-${fieldId}`}
+              htmlFor={fieldId}
+              className="block text-base font-semibold text-blue-700 mb-2"
+            >
+              {field.label || field.name || `Поле ${index + 1}`}
+              {field.required && (
+                <span className="text-red-500 ml-1" aria-label="обязательное поле">*</span>
+              )}
+            </label>
+            
+            {field.description && (
+              <p id={`desc-${fieldId}`} className="text-sm text-blue-400 mb-3">
+                {field.description}
+              </p>
+            )}
+            
+            {field.type === "file" ? (
+                <div className="space-y-4">
+                  {/* Drag and Drop область */}
+                  <div
+                    className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                      dragActive[fieldId]
+                        ? 'border-blue-500 bg-blue-100'
+                        : hasError
+                        ? 'border-red-400 bg-red-50'
+                        : 'border-blue-200 bg-blue-50 hover:border-blue-300 hover:bg-blue-100'
+                    }`}
+                    onDragEnter={(e) => handleDrag(e, fieldId)}
+                    onDragLeave={(e) => handleDrag(e, fieldId)}
+                    onDragOver={(e) => handleDrag(e, fieldId)}
+                    onDrop={(e) => handleDrop(e, fieldId)}
+                  >
+                    <input
+                      id={fieldId}
+                      type="file"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          handleFileUpload(fieldId, file);
+                        }
+                        e.target.value = ""; // Сбрасываем input для возможности повторной загрузки того же файла
+                      }}
+                      className="hidden"
+                      required={field.required && (!formData[fieldId] || formData[fieldId].length === 0)}
+                      accept={field.accept || "*/*"}
+                      aria-describedby={[
+                        field.description ? `desc-${fieldId}` : null,
+                        hasError ? `error-${fieldId}` : null
+                      ].filter(Boolean).join(' ') || undefined}
+                      aria-invalid={hasError}
+                      disabled={isUploading}
+                    />
+                    
+                    {isUploading ? (
+                      <div className="flex flex-col items-center justify-center space-y-3">
+                        <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="text-base font-medium text-blue-600">Загрузка файла...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center space-y-3">
+                        <svg
+                          className={`w-12 h-12 ${dragActive[fieldId] ? 'text-blue-500' : 'text-blue-400'}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                          />
+                        </svg>
+                        <div>
+                          <label
+                            htmlFor={fieldId}
+                            className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium underline"
+                          >
+                            Нажмите для выбора файла
+                          </label>
+                          <span className="text-blue-400 mx-2">или</span>
+                          <span className="text-blue-400">перетащите файл сюда</span>
+                        </div>
+                        <p className="text-sm text-blue-400">
+                          Поддерживаются любые типы файлов
+                        </p>
+                      </div>
+                    )}
+                  </div>
                   {uploadedFiles[fieldId] && uploadedFiles[fieldId].length > 0 && (
-                    <div className="mt-2 space-y-2">
+                    <div className="mt-3 space-y-3">
                       {uploadedFiles[fieldId].map((file) => {
                         const isImage = file.mime_type?.startsWith('image/') || file.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-                        const fileSizeKB = file.file_size ? (file.file_size / 1024).toFixed(2) : '0';
+                        const fileSizeKB = file.file_size ? (file.file_size / 1024).toFixed(1) : '0';
                         
                         return (
                           <div
@@ -440,7 +902,6 @@ function PublicForm() {
                                     alt={file.original_name}
                                     className="w-full h-48 object-contain rounded-md border border-blue-200 bg-white"
                                     onError={(e) => {
-                                      // Если изображение не загрузилось, скрываем превью
                                       e.target.style.display = 'none';
                                     }}
                                   />
@@ -449,6 +910,7 @@ function PublicForm() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity rounded-md"
+                                    aria-label="Открыть изображение в полном размере"
                                   >
                                     <svg
                                       className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -484,17 +946,18 @@ function PublicForm() {
                                       {file.original_name}
                                     </span>
                                     <span className="text-xs text-blue-400 flex-shrink-0">
-                                      ({fileSizeKB} KB)
+                                      {fileSizeKB} KB
                                     </span>
                                   </div>
                                   <button
                                     type="button"
                                     onClick={() => handleFileRemove(fieldId, file.id)}
-                                    className="ml-2 text-red-500 hover:text-red-700 flex-shrink-0"
+                                    className="ml-2 p-1 text-blue-400 hover:text-red-600 transition-colors"
                                     title="Удалить файл"
+                                    aria-label="Удалить файл"
                                   >
                                     <svg
-                                      className="w-5 h-5"
+                                      className="w-4 h-4"
                                       fill="none"
                                       stroke="currentColor"
                                       viewBox="0 0 24 24"
@@ -513,7 +976,7 @@ function PublicForm() {
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-2 flex-1 min-w-0">
                                   <svg
-                                    className="w-5 h-5 text-blue-500 flex-shrink-0"
+                                    className="w-4 h-4 text-blue-500 flex-shrink-0"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -525,14 +988,12 @@ function PublicForm() {
                                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                                     />
                                   </svg>
-                                  <div className="flex-1 min-w-0">
-                                    <span className="text-sm text-blue-700 truncate block">
-                                      {file.original_name}
-                                    </span>
-                                    <span className="text-xs text-blue-400">
-                                      {fileSizeKB} KB
-                                    </span>
-                                  </div>
+                                  <span className="text-sm text-blue-700 truncate">
+                                    {file.original_name}
+                                  </span>
+                                  <span className="text-xs text-blue-400 flex-shrink-0">
+                                    {fileSizeKB} KB
+                                  </span>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                   {file.url && (
@@ -540,11 +1001,12 @@ function PublicForm() {
                                       href={file.url}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="text-blue-500 hover:text-blue-700 flex-shrink-0"
+                                      className="p-1 text-blue-400 hover:text-blue-600 transition-colors"
                                       title="Открыть файл"
+                                      aria-label="Открыть файл"
                                     >
                                       <svg
-                                        className="w-5 h-5"
+                                        className="w-4 h-4"
                                         fill="none"
                                         stroke="currentColor"
                                         viewBox="0 0 24 24"
@@ -561,11 +1023,12 @@ function PublicForm() {
                                   <button
                                     type="button"
                                     onClick={() => handleFileRemove(fieldId, file.id)}
-                                    className="text-red-500 hover:text-red-700 flex-shrink-0"
+                                    className="p-1 text-gray-400 hover:text-red-600 transition-colors"
                                     title="Удалить файл"
+                                    aria-label="Удалить файл"
                                   >
                                     <svg
-                                      className="w-5 h-5"
+                                      className="w-4 h-4"
                                       fill="none"
                                       stroke="currentColor"
                                       viewBox="0 0 24 24"
@@ -589,12 +1052,20 @@ function PublicForm() {
                 </div>
               ) : field.type === "select" ? (
                 <select
-                  value={formData[fieldId] || ""}
-                  onChange={(e) => handleFieldChange(fieldId, e.target.value)}
-                  className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+                  id={fieldId}
+                  value={fieldValue}
+                  onChange={(e) => handleFieldChange(fieldId, e.target.value, field)}
+                  className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
+                    hasError ? 'border-red-400 bg-red-50' : 'border-blue-200'
+                  }`}
                   required={field.required}
+                  aria-describedby={[
+                    field.description ? `desc-${fieldId}` : null,
+                    hasError ? `error-${fieldId}` : null
+                  ].filter(Boolean).join(' ') || undefined}
+                  aria-invalid={hasError}
                 >
-                  <option value="">Выберите...</option>
+                  <option value="">— Выберите вариант —</option>
                   {field.options &&
                     field.options.map((option, optIndex) => {
                       const optionValue =
@@ -610,111 +1081,93 @@ function PublicForm() {
                 </select>
               ) : field.type === "textarea" ? (
                 <textarea
-                  value={formData[fieldId] || ""}
-                  onChange={(e) => handleFieldChange(fieldId, e.target.value)}
-                  className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-                  rows={field.rows || 4}
+                  id={fieldId}
+                  value={fieldValue}
+                  onChange={(e) => handleFieldChange(fieldId, e.target.value, field)}
+                  className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 placeholder:text-blue-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all resize-y ${
+                    hasError ? 'border-red-400 bg-red-50' : 'border-blue-200'
+                  }`}
+                  rows={field.rows || 5}
                   required={field.required}
-                  placeholder={field.placeholder}
+                  placeholder={field.placeholder || ""}
+                  aria-describedby={[
+                    field.description ? `desc-${fieldId}` : null,
+                    hasError ? `error-${fieldId}` : null
+                  ].filter(Boolean).join(' ') || undefined}
+                  aria-invalid={hasError}
                 />
               ) : (
                 <input
+                  id={fieldId}
                   type={field.type || "text"}
-                  value={formData[fieldId] || ""}
-                  onChange={(e) => handleFieldChange(fieldId, e.target.value)}
-                  className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+                  value={fieldValue}
+                  onChange={(e) => handleFieldChange(fieldId, e.target.value, field)}
+                  className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
+                    hasError ? 'border-red-400 bg-red-50' : 'border-blue-200'
+                  }`}
                   required={field.required}
-                  placeholder={field.placeholder}
+                  placeholder={field.placeholder || ""}
+                  aria-describedby={[
+                    field.description ? `desc-${fieldId}` : null,
+                    hasError ? `error-${fieldId}` : null
+                  ].filter(Boolean).join(' ') || undefined}
+                  aria-invalid={hasError}
                 />
               )}
               
-              {field.description && (
-                <p className="text-xs text-blue-400 mt-1">{field.description}</p>
-              )}
-            </div>
-          );
-        });
-    }
-
-    // Если схема простая (просто объект), создаём базовые поля
-    return (
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-blue-700 mb-1">
-            Имя *
-          </label>
-          <input
-            type="text"
-            value={formData.first_name || ""}
-            onChange={(e) => handleFieldChange("first_name", e.target.value)}
-            className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-blue-700 mb-1">
-            Фамилия *
-          </label>
-          <input
-            type="text"
-            value={formData.last_name || ""}
-            onChange={(e) => handleFieldChange("last_name", e.target.value)}
-            className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-blue-700 mb-1">
-            Email *
-          </label>
-          <input
-            type="email"
-            value={formData.email || ""}
-            onChange={(e) => handleFieldChange("email", e.target.value)}
-            className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-blue-700 mb-1">
-            Телефон
-          </label>
-          <input
-            type="tel"
-            value={formData.phone || ""}
-            onChange={(e) => handleFieldChange("phone", e.target.value)}
-            className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-blue-700 mb-1">
-            Комментарий
-          </label>
-          <textarea
-            value={formData.comment || ""}
-            onChange={(e) => handleFieldChange("comment", e.target.value)}
-            className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-            rows="4"
-          />
-        </div>
-      </div>
-    );
+            {hasError && (
+              <div id={`error-${fieldId}`} className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md" role="alert">
+                <ul className="list-disc list-inside space-y-0.5">
+                  {errors.map((error, idx) => (
+                    <li key={idx} className="text-sm text-red-700">{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+      });
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">
-        <div className="text-blue-400">Загрузка формы...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white px-4">
+        <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-10 max-w-md w-full text-center">
+          <div className="flex justify-center mb-6">
+            <svg className="animate-spin h-12 w-12 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+          <p className="text-xl font-semibold text-blue-700">Загрузка формы...</p>
+          <p className="text-base text-blue-400 mt-2">Пожалуйста, подождите</p>
+        </div>
       </div>
     );
   }
 
   if (error && !travelCase) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">
-        <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-8 max-w-md w-full text-center">
-          <div className="text-red-500 mb-4">{error}</div>
-          <p className="text-blue-400 text-sm">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white px-4">
+        <div className="bg-white rounded-xl shadow-sm border border-red-200 p-10 max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg
+              className="w-10 h-10 text-red-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-blue-700 mb-4">Ошибка загрузки</h2>
+          <div className="text-lg text-red-600 mb-4 font-medium">{error}</div>
+          <p className="text-base text-blue-400 leading-relaxed">
             Проверьте правильность ссылки или обратитесь к администратору.
           </p>
         </div>
@@ -724,65 +1177,156 @@ function PublicForm() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">
-        <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white px-4">
+        <div className="bg-white rounded-xl shadow-sm border border-green-200 p-10 max-w-md w-full text-center">
+          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <svg
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
+              className="w-12 h-12 text-green-600"
               fill="none"
-              stroke="#10b981"
-              strokeWidth="2"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <path d="M5 13l4 4L19 7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={3}
+                d="M5 13l4 4L19 7"
+              />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-blue-700 mb-2">
+          <h2 className="text-3xl font-bold text-blue-700 mb-4">
             Форма успешно отправлена!
           </h2>
-          <p className="text-blue-400">
+          <p className="text-lg text-blue-400 leading-relaxed mb-6">
             Ваши данные получены. Мы свяжемся с вами в ближайшее время.
           </p>
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-base text-green-800">
+              <strong>Спасибо за заполнение формы!</strong>
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white py-12 px-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-8">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-blue-700 mb-2">
-              {travelCase?.form_template?.name || "Форма заявки на визу"}
-            </h1>
-            {travelCase?.visa_type && (
-              <p className="text-blue-400">
-                Тип визы: {travelCase.visa_type.name} ({travelCase.visa_type.country})
-              </p>
-            )}
-          </div>
+  // Определяем шаги с видимыми полями
+  const firstStepWithVisibleFields = formSteps.length > 0 ? findFirstStepWithVisibleFields() : 0;
+  const lastStepWithVisibleFields = formSteps.length > 0 ? findLastStepWithVisibleFields() : 0;
+  
+  // Проверяем, есть ли следующий шаг с видимыми полями - это более надёжная проверка
+  // Важно: проверяем это динамически на основе текущего шага
+  const nextStepIndex = findNextStepWithVisibleFields(currentStep);
+  const hasNextStepWithVisibleFields = nextStepIndex !== null;
+  const isLastStep = formSteps.length > 0 && !hasNextStepWithVisibleFields;
+  const isFirstStep = formSteps.length > 0 && (currentStep === firstStepWithVisibleFields || findPrevStepWithVisibleFields(currentStep) === null);
+  const totalSteps = formSteps.length;
 
-          {error && (
-            <div className="mb-4 text-red-500 bg-red-50 rounded py-2 px-3 text-sm">
-              {error}
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white py-8 px-4 sm:py-12">
+      <div className="max-w-2xl mx-auto">
+        {/* Минималистичный заголовок */}
+        <div className="mb-8 text-center">
+          <h1 className="text-2xl sm:text-3xl font-bold text-blue-700 mb-2">
+            {travelCase?.form_template?.name || "Форма заявки на визу"}
+          </h1>
+          {travelCase?.visa_type && (
+            <p className="text-sm text-blue-400">
+              {travelCase.visa_type.name} ({travelCase.visa_type.country})
+            </p>
+          )}
+        </div>
+
+        {totalSteps > 0 && (
+          <div className="mb-6 text-center">
+            <span className="text-sm text-blue-400">
+              Шаг {currentStep + 1} из {totalSteps}
+            </span>
+          </div>
+        )}
+
+        <div className="mb-4 text-center h-6">
+          {savingStatus === 'saving' && (
+            <div className="inline-flex items-center space-x-2 text-sm text-blue-400">
+              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>Сохранение...</span>
             </div>
           )}
+        </div>
 
+        {/* Общая ошибка */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md" role="alert">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit}>
+        {/* Форма */}
+        <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-6 sm:p-8">
+          <form onSubmit={handleSubmit} noValidate>
             {renderFormFields()}
 
-            <div className="mt-6">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-md font-medium transition-colors disabled:opacity-50"
-              >
-                {submitting ? "Отправка..." : "Отправить форму"}
-              </button>
-            </div>
+            {/* Навигация между шагами */}
+            {totalSteps > 1 && (
+              <div className="mt-8 flex items-center justify-between pt-6 border-t border-blue-100">
+                <button
+                  type="button"
+                  onClick={prevStep}
+                  disabled={isFirstStep}
+                  className={`flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    isFirstStep
+                      ? 'text-blue-200 cursor-not-allowed'
+                      : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
+                  }`}
+                  aria-label="Предыдущий шаг"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  <span>Назад</span>
+                </button>
+
+                {!isLastStep ? (
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    className="flex items-center space-x-2 px-6 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
+                    aria-label="Следующий шаг"
+                  >
+                    <span>Далее</span>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-6 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
+                    aria-label="Отправить форму"
+                  >
+                    {submitting ? "Отправка..." : "Отправить форму"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Кнопка отправки для формы без шагов */}
+            {totalSteps <= 1 && (
+              <div className="mt-8 pt-6 border-t border-blue-100">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full px-6 py-3 bg-blue-500 text-white text-base font-medium rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
+                  aria-label="Отправить форму"
+                >
+                  {submitting ? "Отправка..." : "Отправить форму"}
+                </button>
+              </div>
+            )}
           </form>
         </div>
       </div>
@@ -791,5 +1335,3 @@ function PublicForm() {
 }
 
 export default PublicForm;
-
-
