@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { apiRequest } from "../../utils/api";
 import TravelCaseForm from "../../components/admin/TravelCaseForm";
 import ConfirmModal from "../../components/common/ConfirmModal";
 import { useToastContext } from "../../contexts/ToastContext";
 
 function TravelCases() {
-  const navigate = useNavigate();
   const toast = useToastContext();
   const [travelCases, setTravelCases] = useState([]);
   const [visaTypes, setVisaTypes] = useState([]);
@@ -125,11 +123,6 @@ function TravelCases() {
     } catch (error) {
       console.error("Ошибка загрузки заявки:", error);
     }
-  };
-
-  const copyToken = (token) => {
-    navigator.clipboard.writeText(token);
-    toast.success("Токен скопирован в буфер обмена");
   };
 
   const copyFormLink = (token) => {

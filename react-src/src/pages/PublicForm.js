@@ -620,16 +620,6 @@ function PublicForm() {
     return 0;
   };
 
-  // Навигация между шагами
-  const nextStep = () => {
-    const nextStepIndex = findNextStepWithVisibleFields(currentStep);
-    if (nextStepIndex !== null) {
-      setCurrentStep(nextStepIndex);
-      // Прокручиваем вверх при переходе
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
   const prevStep = () => {
     const prevStepIndex = findPrevStepWithVisibleFields(currentStep);
     if (prevStepIndex !== null) {
@@ -695,40 +685,6 @@ function PublicForm() {
         }
       }
     }
-  };
-
-  // Расчет прогресса заполнения формы
-  const calculateProgress = () => {
-    if (!travelCase?.form_template?.schema?.fields) return 0;
-    
-    const visibleFields = travelCase.form_template.schema.fields.filter((field) => 
-      isFieldVisible(field)
-    );
-    
-    if (visibleFields.length === 0) return 100;
-    
-    let filledFields = 0;
-    visibleFields.forEach((field) => {
-      const fieldId = field.name || field.id;
-      const value = formData[fieldId];
-      
-      if (field.required) {
-        if (field.type === "file") {
-          if (value && Array.isArray(value) && value.length > 0) {
-            filledFields++;
-          }
-        } else if (value !== undefined && value !== null && value !== "") {
-          filledFields++;
-        }
-      } else {
-        // Для необязательных полей считаем заполненными, если есть значение
-        if (value !== undefined && value !== null && value !== "") {
-          filledFields++;
-        }
-      }
-    });
-    
-    return Math.round((filledFields / visibleFields.length) * 100);
   };
 
   const renderFormFields = () => {
@@ -1212,7 +1168,6 @@ function PublicForm() {
 
   // Определяем шаги с видимыми полями
   const firstStepWithVisibleFields = formSteps.length > 0 ? findFirstStepWithVisibleFields() : 0;
-  const lastStepWithVisibleFields = formSteps.length > 0 ? findLastStepWithVisibleFields() : 0;
   
   // Проверяем, есть ли следующий шаг с видимыми полями - это более надёжная проверка
   // Важно: проверяем это динамически на основе текущего шага
