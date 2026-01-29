@@ -9,29 +9,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # 1. Получаем код
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # 2. Устанавливаем PHP
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
         php-version: 8.3
 
+    # 3. Устанавливаем Node
     - name: Setup Node
       uses: actions/setup-node@v4
       with:
         node-version: 18
 
+    # 4. Устанавливаем зависимости Laravel
     - name: Install backend dependencies
-      working-directory: backend
       run: composer install --no-dev --optimize-autoloader
 
+    # 5. Собираем фронт
     - name: Build frontend
-      working-directory: frontend
+      working-directory: react-src
       run: |
         npm install
         npm run build
 
+    # 6. Копируем фронт в /public
+    - name: Copy frontend build to public
+      run: |
+        rm -rf public/*
+        cp -r react-src/build/* public/
+
+    # 7. Деплой на сервер
     - name: Deploy to server
       uses: appleboy/ssh-action@v1
       with:
@@ -39,9 +50,8 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          cd /var/www/project
+          cd /var/www/www-root/data/www/lk.visavisa.by
           git pull origin master
-          cd backend
           composer install --no-dev
           php artisan migrate --force
           php artisan optimize
