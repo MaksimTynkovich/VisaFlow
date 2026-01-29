@@ -1,7 +1,7 @@
 /.phpunit.cache
 /react-src/node_modules
 /node_modules
-/react-src/public/build
+/react-src/build
 /public/hot
 /public/storage
 /public

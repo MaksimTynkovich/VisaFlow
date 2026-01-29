@@ -22,7 +22,6 @@ const CONDITION_OPERATORS = [
 function SchemaEditor({ schema, onChange }) {
   const [fields, setFields] = useState(schema?.fields || []);
   const [editingIndex, setEditingIndex] = useState(null);
-  const [showAddField, setShowAddField] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
   // Синхронизируем fields при изменении schema извне
@@ -49,7 +48,6 @@ function SchemaEditor({ schema, onChange }) {
     const newFields = [...fields, newField];
     updateFields(newFields);
     setEditingIndex(newFields.length - 1);
-    setShowAddField(false);
   };
 
   const updateField = (index, updates) => {
