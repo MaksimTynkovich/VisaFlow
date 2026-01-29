@@ -33,8 +33,8 @@ jobs:
     - name: Build frontend
       working-directory: react-src
       run: |
-        npm install
-        npm run build
+        CI=false npm install
+        CI=true npm run build
 
     # 6. Копируем фронт в /public
     - name: Copy frontend build to public
