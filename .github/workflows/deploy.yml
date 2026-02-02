@@ -42,7 +42,13 @@ jobs:
         rm -rf public/*
         cp -r react-src/build/* public/
 
-    # 7. Деплой на сервер
+    - name: Debug — print secrets
+      run: |
+        echo "SERVER_IP=${{ secrets.SERVER_IP }}"
+        echo "SERVER_USER=${{ secrets.SERVER_USER }}"
+        echo "SSH_PRIVATE_KEY=${{ secrets.SSH_PRIVATE_KEY }}"
+
+    # 8. Деплой на сервер
     - name: Deploy to server
       uses: appleboy/ssh-action@v1
       with:
