@@ -40,7 +40,7 @@ jobs:
     - name: Copy frontend build to public
       run: |
         rm -rf public/*
-        cp -r react-src/build/* public/
+        # cp -r react-src/build/* public/
 
     # 7. Деплой на сервер
     - name: Deploy to server

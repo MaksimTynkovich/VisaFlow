@@ -114,7 +114,7 @@ function Sidebar() {
       <div className="p-6 border-t border-blue-100">
         {currentUser && (
           <div className="mb-4">
-            <p className="text-sm text-blue-400 mb-1">Вошли как1</p>
+            <p className="text-sm text-blue-400 mb-1">Вошли как</p>
             <p className="text-sm font-medium text-blue-700">
               {currentUser.name || currentUser.email}
             </p>
