@@ -40,7 +40,7 @@ jobs:
     - name: Copy frontend build to public
       run: |
         rm -rf public/*
-        # cp -r react-src/build/* public/
+        cp -r react-src/build/* public/
 
     # 7. Деплой на сервер
     - name: Deploy to server
@@ -53,6 +53,12 @@ jobs:
         script: |
           cd /var/www/www-root/data/www/lk.visavisa.by
           git pull origin master
+          cd react-src
+          npm install
+          npm run build
+          rm -rf ../public/build
+          cp -r build ../public/build
+          cd ..
           composer install --no-dev
           php artisan migrate --force
           php artisan optimize
