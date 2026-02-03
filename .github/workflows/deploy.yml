@@ -56,8 +56,10 @@ jobs:
           cd react-src
           npm install
           npm run build
-          rm -rf ../public/build
-          cp -r build ../public/build
+          rsync -av --delete \
+            --exclude index.php \
+            --exclude storage \
+            build/ ../public/
           cd ..
           composer install --no-dev
           php artisan migrate --force
