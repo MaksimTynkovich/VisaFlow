@@ -1,11 +1,15 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Bitrix\BitrixWebhookController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Public\PublicFormController;
+use Illuminate\Support\Facades\Route;
 
 Route::post('/admin/auth/login', [AuthController::class, 'login']);
+
+// Bitrix24: создать форму из сделки (публичный webhook)
+Route::match(['get', 'post'], '/bitrix/create-form-from-deal', [BitrixWebhookController::class, 'createFormFromDeal']);
 
 // Публичные роуты для форм
 Route::get('/public/form/{token}', [PublicFormController::class, 'show']);

@@ -18,6 +18,7 @@ class TravelCase extends Model
         'visa_type_id',
         'form_template_id',
         'public_token',
+        'bitrix_deal_id',
         'status',
         'filled_at',
     ];

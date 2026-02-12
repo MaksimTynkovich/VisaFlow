@@ -33,6 +33,77 @@
 
 ---
 
+## Интеграция Bitrix24
+
+Интеграция позволяет создавать форму VisaVisa из сделки Bitrix24: по нажатию кнопки забираются данные контакта и предзаполняются форма.
+
+### Настройка
+
+1. Создайте входящий вебхук в Bitrix24: **Настройки → Разработчикам → Входящий вебхук**
+2. Добавьте в `.env`:
+   ```
+   BITRIX_WEBHOOK_URL=https://your-portal.bitrix24.by/rest/480/your-webhook-code/
+   BITRIX_DEFAULT_FORM_TEMPLATE_ID=1   # visa_type берётся из шаблона
+   BITRIX_FORM_BASE_URL=http://localhost:3000
+   BITRIX_CREATED_BY_USER_ID=1
+   ```
+3. Убедитесь, что в шаблоне формы поля имеют `name`/`id`, соответствующие маппингу (см. `config/bitrix.php`), или задайте `bitrix_field` в schema поля.
+
+### API
+
+**Создать форму из сделки**
+
+```
+POST /api/bitrix/create-form-from-deal
+GET  /api/bitrix/create-form-from-deal?deal_id=123
+```
+
+Тело POST (JSON):
+```json
+{
+  "deal_id": 123,
+  "form_template_id": 1
+}
+```
+
+Ответ:
+```json
+{
+  "data": {
+    "travel_case_id": 1,
+    "token": "...",
+    "form_url": "http://localhost:3000/form/...",
+    "bitrix_deal_id": "123"
+  }
+}
+```
+
+### Маппинг полей Bitrix → форма
+
+| Поле формы (name/id) | Bitrix Contact |
+|----------------------|----------------|
+| first_name, name     | NAME           |
+| last_name, surname   | LAST_NAME      |
+| middle_name          | SECOND_NAME    |
+| phone                | PHONE (первый) |
+| email                | EMAIL (первый) |
+| address_city         | ADDRESS_CITY   |
+| birthdate            | BIRTHDATE      |
+
+Можно переопределить в schema: `"bitrix_field": "NAME"`.
+
+### Кнопка в Bitrix24
+
+В карточке сделки добавьте кнопку/обработчик, который вызывает:
+
+```
+https://your-visavisa-domain.com/api/bitrix/create-form-from-deal?deal_id={ID}
+```
+
+или открывает форму по `form_url` из ответа.
+
+---
+
 ## Итоговая структура
 ```
 pos-project/

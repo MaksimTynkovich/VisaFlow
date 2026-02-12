@@ -17,6 +17,7 @@ class TravelCaseResource extends JsonResource
         return [
             'id' => $this->id,
             'public_token' => $this->public_token,
+            'bitrix_deal_id' => $this->bitrix_deal_id,
             'status' => $this->status,
             'filled_at' => $this->filled_at,
             'visa_type_id' => $this->visa_type_id,

@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\FormFile;
-use App\Models\TravelCase;
 use App\Services\Admin\TravelCaseService;
+use App\Services\Bitrix\BitrixApiService;
 use App\Services\Public\FormDraftService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,7 +16,8 @@ class PublicFormController extends Controller
 {
     public function __construct(
         private readonly TravelCaseService $travelCaseService,
-        private readonly FormDraftService $formDraftService
+        private readonly FormDraftService $formDraftService,
+        private readonly BitrixApiService $bitrixApi
     ) {
     }
 
@@ -315,6 +316,21 @@ class PublicFormController extends Controller
 
         // Удаляем черновик после успешной отправки
         $this->formDraftService->deleteDraft($token);
+
+        // Отправляем комментарий в таймлайн сделки Bitrix, если заявка связана со сделкой
+        if ($travelCase->bitrix_deal_id && config('bitrix.webhook_url')) {
+            $payload = $request->input('payload', []);
+            $commentData = [
+                'submitted_at' => now()->toIso8601String(),
+                'travel_case_id' => $travelCase->id,
+                'payload' => $payload,
+            ];
+            $comment = "Форма VisaVisa отправлена\n\n" . json_encode(
+                $commentData,
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE
+            );
+            $this->bitrixApi->addDealTimelineComment((int) $travelCase->bitrix_deal_id, $comment);
+        }
 
         return response()->json([
             'data' => [
