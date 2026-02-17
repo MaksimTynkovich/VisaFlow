@@ -19,7 +19,6 @@ class UpdateTravelCaseRequest extends FormRequest
             'visa_type_id' => 'sometimes|exists:visa_types,id',
             'form_template_id' => 'sometimes|exists:form_templates,id',
             'user_id' => 'nullable|exists:users,id',
-            'status' => 'sometimes|string|in:new,filled,archived',
         ];
     }
 

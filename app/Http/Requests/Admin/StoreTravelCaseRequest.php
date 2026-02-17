@@ -19,7 +19,6 @@ class StoreTravelCaseRequest extends FormRequest
             'visa_type_id' => 'required|exists:visa_types,id',
             'form_template_id' => 'required|exists:form_templates,id',
             'user_id' => 'nullable|exists:users,id',
-            'status' => 'sometimes|string|in:new,filled,archived',
             'created_by' => 'sometimes|exists:users,id',
         ];
     }
@@ -41,7 +40,7 @@ class StoreTravelCaseRequest extends FormRequest
     {
         $this->merge([
             'created_by' => $this->user()->id,
-            'status' => $this->input('status', 'new'),
+            'status' => 'new',
         ]);
     }
 }

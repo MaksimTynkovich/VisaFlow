@@ -140,6 +140,117 @@ function SchemaEditor({ schema, onChange }) {
   );
 }
 
+function SelectOptionsEditor({ options, onChange }) {
+  const normalizedOptions = React.useMemo(
+    () =>
+      (options || []).map((opt) =>
+        typeof opt === "string" ? { value: opt, label: opt } : { value: opt.value ?? opt.label ?? "", label: opt.label ?? opt.value ?? "" }
+      ),
+    [options]
+  );
+
+  const updateOption = (index, updates) => {
+    const next = [...normalizedOptions];
+    next[index] = { ...next[index], ...updates };
+    onChange(next);
+  };
+
+  const addOption = () => {
+    onChange([...normalizedOptions, { value: "", label: "" }]);
+  };
+
+  const removeOption = (index) => {
+    const next = normalizedOptions.filter((_, i) => i !== index);
+    onChange(next);
+  };
+
+  const moveOption = (fromIndex, direction) => {
+    const toIndex = fromIndex + direction;
+    if (toIndex < 0 || toIndex >= normalizedOptions.length) return;
+    const next = [...normalizedOptions];
+    [next[fromIndex], next[toIndex]] = [next[toIndex], next[fromIndex]];
+    onChange(next);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="block text-sm font-medium text-blue-700">
+          Варианты выбора
+        </label>
+        <button
+          type="button"
+          onClick={addOption}
+          className="px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 transition-colors"
+        >
+          + Добавить вариант
+        </button>
+      </div>
+      <div className="space-y-2 border border-blue-200 rounded-md bg-blue-50/50 p-3">
+        {normalizedOptions.length === 0 ? (
+          <p className="text-sm text-blue-400 py-2 text-center">
+            Нет вариантов. Нажмите «Добавить вариант».
+          </p>
+        ) : (
+          normalizedOptions.map((opt, index) => (
+            <div
+              key={index}
+              className="flex items-center gap-2 bg-white rounded border border-blue-200 p-2"
+            >
+              <span className="text-blue-400 text-sm w-6">{index + 1}.</span>
+              <input
+                type="text"
+                value={opt.label}
+                onChange={(e) => updateOption(index, { label: e.target.value })}
+                placeholder="Текст варианта"
+                className="flex-1 py-1.5 px-2 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+              />
+                <input
+                type="text"
+                value={opt.value}
+                onChange={(e) => updateOption(index, { value: e.target.value })}
+                placeholder="Значение"
+                className="flex-1 py-1.5 px-2 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-200 outline-none text-blue-600"
+              />
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => moveOption(index, -1)}
+                  disabled={index === 0}
+                  className="p-1.5 text-blue-500 hover:bg-blue-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Вверх"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveOption(index, 1)}
+                  disabled={index === normalizedOptions.length - 1}
+                  className="p-1.5 text-blue-500 hover:bg-blue-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Вниз"
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeOption(index)}
+                  className="p-1.5 text-red-500 hover:bg-red-100 rounded"
+                  title="Удалить"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      <p className="text-xs text-blue-400 mt-1">
+        «Текст варианта» — что видит пользователь. «Значение» — сохраняется в ответе, задаётся вручную.
+      </p>
+    </div>
+  );
+}
+
 function FieldEditor({
   field,
   index,
@@ -153,42 +264,19 @@ function FieldEditor({
   availableFields,
 }) {
   const [localField, setLocalField] = useState(field);
-  const [optionsText, setOptionsText] = useState("");
 
   React.useEffect(() => {
     setLocalField(field);
-    // Инициализируем optionsText при открытии редактирования
-    if (field.options && Array.isArray(field.options)) {
-      setOptionsText(
-        JSON.stringify(
-          field.options.map((opt) =>
-            typeof opt === "string" ? { value: opt, label: opt } : opt
-          ),
-          null,
-          2
-        )
-      );
-    } else {
-      setOptionsText("");
-    }
   }, [field]);
 
   const handleSave = () => {
-    // При сохранении проверяем и парсим options, если есть текст
     let finalField = { ...localField };
-    
-    if (localField.type === "select" && optionsText.trim()) {
-      try {
-        const parsed = JSON.parse(optionsText);
-        if (Array.isArray(parsed)) {
-          finalField.options = parsed;
-        }
-      } catch {
-        // Если JSON невалиден, не сохраняем options
-        // Пользователь увидит ошибку и сможет исправить
-      }
+    if (localField.type === "select" && Array.isArray(localField.options)) {
+      finalField.options = localField.options.filter((opt) => {
+        const v = typeof opt === "string" ? opt : (opt.value ?? opt.label ?? "");
+        return String(v).trim() !== "";
+      });
     }
-    
     onUpdate(finalField);
     onCancel();
   };
@@ -304,59 +392,10 @@ function FieldEditor({
         </div>
 
         {localField.type === "select" && (
-          <div>
-            <label className="block text-sm font-medium text-blue-700 mb-1">
-              Варианты выбора (JSON массив)
-            </label>
-            <textarea
-              value={optionsText}
-              onChange={(e) => {
-                const text = e.target.value;
-                // Просто обновляем текст - никакого парсинга во время ввода
-                setOptionsText(text);
-              }}
-              onBlur={() => {
-                // При потере фокуса пытаемся распарсить и сохранить
-                if (optionsText.trim()) {
-                  try {
-                    const parsed = JSON.parse(optionsText);
-                    if (Array.isArray(parsed)) {
-                      setLocalField({ ...localField, options: parsed });
-                    } else {
-                      // Если не массив, показываем ошибку
-                      setOptionsText(optionsText); // Оставляем текст как есть
-                    }
-                  } catch {
-                    // JSON невалиден - оставляем текст как есть, пользователь может исправить
-                  }
-                } else {
-                  setLocalField({ ...localField, options: undefined });
-                }
-              }}
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 font-mono text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-              rows={4}
-              placeholder='[{"value": "option1", "label": "Вариант 1"}]'
-            />
-            {optionsText.trim() && (() => {
-              try {
-                const parsed = JSON.parse(optionsText);
-                if (!Array.isArray(parsed)) {
-                  return (
-                    <p className="text-xs text-orange-500 mt-1">
-                      Ожидается массив. Исправьте формат для сохранения.
-                    </p>
-                  );
-                }
-                return null;
-              } catch {
-                return (
-                  <p className="text-xs text-orange-500 mt-1">
-                    JSON невалиден. Исправьте ошибки для сохранения.
-                  </p>
-                );
-              }
-            })()}
-          </div>
+          <SelectOptionsEditor
+            options={localField.options || []}
+            onChange={(options) => setLocalField({ ...localField, options })}
+          />
         )}
 
         <div className="flex items-center gap-4">

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\FormFile;
+use App\Models\TravelCase;
 use App\Services\Admin\TravelCaseService;
 use App\Services\Bitrix\BitrixApiService;
 use App\Services\Public\FormDraftService;
@@ -320,15 +321,7 @@ class PublicFormController extends Controller
         // Отправляем комментарий в таймлайн сделки Bitrix, если заявка связана со сделкой
         if ($travelCase->bitrix_deal_id && config('bitrix.webhook_url')) {
             $payload = $request->input('payload', []);
-            $commentData = [
-                'submitted_at' => now()->toIso8601String(),
-                'travel_case_id' => $travelCase->id,
-                'payload' => $payload,
-            ];
-            $comment = "Форма VisaVisa отправлена\n\n" . json_encode(
-                $commentData,
-                JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE
-            );
+            $comment = $this->formatBitrixComment($travelCase, $payload);
             $this->bitrixApi->addDealTimelineComment((int) $travelCase->bitrix_deal_id, $comment);
         }
 
@@ -338,6 +331,56 @@ class PublicFormController extends Controller
                 'message' => 'Ответ успешно сохранён',
             ],
         ], 201);
+    }
+
+    /**
+     * Форматировать данные формы для комментария в Bitrix: "Название поля — значение".
+     */
+    private function formatBitrixComment(TravelCase $travelCase, array $payload): string
+    {
+        $schema = $travelCase->formTemplate->schema ?? [];
+        $fields = $schema['fields'] ?? [];
+        $labelMap = [];
+        foreach ($fields as $field) {
+            $id = $field['name'] ?? $field['id'] ?? null;
+            $label = $field['label'] ?? $id ?? '';
+            if ($id) {
+                $labelMap[$id] = $label;
+            }
+        }
+
+        $templateName = $travelCase->formTemplate->name ?? '—';
+        $lines = [
+            'Клиент отправил форму',
+            'Шаблон: ' . $templateName,
+            'Дата: ' . now()->format('d.m.Y H:i'),
+            '',
+        ];
+
+        foreach ($payload as $fieldId => $value) {
+            $label = $labelMap[$fieldId] ?? $fieldId;
+            if (is_array($value)) {
+                $count = count($value);
+                $lines[] = $label . ': загружено ' . $count . ' ' . $this->pluralFiles($count);
+            } elseif ($value !== null && $value !== '') {
+                $lines[] = $label . ': ' . $value;
+            }
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function pluralFiles(int $n): string
+    {
+        $mod10 = $n % 10;
+        $mod100 = $n % 100;
+        if ($mod10 === 1 && $mod100 !== 11) {
+            return 'файл';
+        }
+        if (in_array($mod10, [2, 3, 4]) && !in_array($mod100, [12, 13, 14])) {
+            return 'файла';
+        }
+        return 'файлов';
     }
 }
 

@@ -43,10 +43,12 @@
 2. Добавьте в `.env`:
    ```
    BITRIX_WEBHOOK_URL=https://your-portal.bitrix24.by/rest/480/your-webhook-code/
-   BITRIX_DEFAULT_FORM_TEMPLATE_ID=1   # visa_type берётся из шаблона
+   BITRIX_DEFAULT_FORM_TEMPLATE_ID=2   # Шаблон по умолчанию
+   BITRIX_RULE_TEMPLATE_PROPERTY1262_1598=1   # Если property1262=1598 — этот шаблон
    BITRIX_FORM_BASE_URL=http://localhost:3000
    BITRIX_CREATED_BY_USER_ID=1
    ```
+   Правила выбора шаблона: если у товара сделки property1262=1598 — шаблон 1, иначе — BITRIX_DEFAULT_FORM_TEMPLATE_ID.
 3. Убедитесь, что в шаблоне формы поля имеют `name`/`id`, соответствующие маппингу (см. `config/bitrix.php`), или задайте `bitrix_field` в schema поля.
 
 ### API
@@ -77,6 +79,8 @@ GET  /api/bitrix/create-form-from-deal?deal_id=123
   }
 }
 ```
+
+Продукт из сделки сохраняется в заявке (`bitrix_product_snapshot`) и доступен в API заявок (GET `/api/admin/travel-cases/{id}`) и в админке.
 
 ### Маппинг полей Bitrix → форма
 

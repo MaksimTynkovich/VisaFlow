@@ -19,11 +19,13 @@ class TravelCase extends Model
         'form_template_id',
         'public_token',
         'bitrix_deal_id',
+        'bitrix_product_snapshot',
         'status',
         'filled_at',
     ];
 
     protected $casts = [
+        'bitrix_product_snapshot' => 'array',
         'filled_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
