@@ -41,10 +41,23 @@ class BitrixFormFromDealService
             return null;
         }
 
+        $deal = $this->bitrixApi->getDeal($dealId);
+        if (!$deal) {
+            $this->lastError = "Не удалось загрузить сделку {$dealId} из Bitrix. См. storage/logs/laravel.log";
+
+            return null;
+        }
+
+        $products = $this->bitrixApi->getDealProducts($dealId);
+        $firstProduct = $products[0] ?? null;
+
+        if ($formTemplateId === null) {
+            $formTemplateId = $this->resolveFormTemplateByProductRules($products);
+        }
         $formTemplateId = $formTemplateId ?? config('bitrix.default_form_template_id');
 
         if (!$formTemplateId) {
-            $this->lastError = 'Не задан form_template_id (в запросе или BITRIX_DEFAULT_FORM_TEMPLATE_ID)';
+            $this->lastError = 'Не задан form_template_id. Настройте property_template_rules или BITRIX_DEFAULT_FORM_TEMPLATE_ID.';
 
             return null;
         }
@@ -57,13 +70,6 @@ class BitrixFormFromDealService
         }
 
         $visaTypeId = $formTemplate->visa_type_id;
-
-        $deal = $this->bitrixApi->getDeal($dealId);
-        if (!$deal) {
-            $this->lastError = "Не удалось загрузить сделку {$dealId} из Bitrix. Проверьте webhook, права и наличие сделки. См. storage/logs/laravel.log";
-
-            return null;
-        }
 
         $contactId = $this->resolveContactId($deal, $dealId);
         if (!$contactId) {
@@ -80,14 +86,22 @@ class BitrixFormFromDealService
         }
 
         $prefilledData = $this->mapContactToFormSchema($contact, $formTemplate->schema);
-
         $createdBy = $this->resolveCreatedByUserId();
+        $productSnapshot = $firstProduct ? [
+            'id' => $firstProduct['id'],
+            'product_id' => $firstProduct['product_id'],
+            'name' => $firstProduct['name'],
+            'quantity' => $firstProduct['quantity'],
+            'price' => $firstProduct['price'],
+            'properties' => $firstProduct['properties'] ?? [],
+        ] : null;
 
         return DB::transaction(function () use (
             $dealId,
             $visaTypeId,
             $formTemplateId,
             $prefilledData,
+            $productSnapshot,
             $createdBy
         ) {
             $travelCase = $this->travelCaseService->create([
@@ -97,6 +111,7 @@ class BitrixFormFromDealService
                 'created_by' => $createdBy,
                 'status' => 'new',
                 'bitrix_deal_id' => (string) $dealId,
+                'bitrix_product_snapshot' => $productSnapshot,
             ]);
 
             if (!empty($prefilledData)) {
@@ -112,6 +127,34 @@ class BitrixFormFromDealService
                 'token' => $travelCase->public_token,
             ];
         });
+    }
+
+    /**
+     * Определить form_template_id по правилам: если у товара property=X и value=Y — шаблон из правила.
+     */
+    private function resolveFormTemplateByProductRules(array $products): ?int
+    {
+        $rules = config('bitrix.property_template_rules', []);
+
+        foreach ($products as $product) {
+            $properties = $product['properties'] ?? [];
+            foreach ($rules as $rule) {
+                $prop = $rule['property'] ?? null;
+                $expectedValue = (string) ($rule['value'] ?? '');
+                $templateId = isset($rule['form_template_id']) ? (int) $rule['form_template_id'] : null;
+
+                if (!$prop || $templateId <= 0) {
+                    continue;
+                }
+
+                $actualValue = $properties[$prop] ?? null;
+                if ($actualValue !== null && (string) $actualValue === $expectedValue) {
+                    return $templateId;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

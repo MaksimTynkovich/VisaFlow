@@ -243,6 +243,9 @@ function TravelCases() {
                     Шаблон
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-blue-700 uppercase tracking-wider">
+                    Продукт (Bitrix)
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-blue-700 uppercase tracking-wider">
                     Статус
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-blue-700 uppercase tracking-wider">
@@ -288,6 +291,11 @@ function TravelCases() {
                     <td className="px-6 py-4 text-sm text-blue-700 max-w-[200px]">
                       <div className="truncate" title={travelCase.form_template?.name}>
                         {travelCase.form_template?.name || "—"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-blue-700 max-w-[180px]">
+                      <div className="truncate" title={travelCase.bitrix_product_snapshot?.name}>
+                        {travelCase.bitrix_product_snapshot?.name || "—"}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -514,6 +522,38 @@ function TravelCaseView({ travelCase, onClose }) {
                 {travelCase.form_template?.name || "—"}
               </div>
             </div>
+            {travelCase.bitrix_deal_id && (
+              <div>
+                <label className="text-sm text-blue-400">Сделка Bitrix</label>
+                <div className="mt-1 text-blue-700">#{travelCase.bitrix_deal_id}</div>
+              </div>
+            )}
+            {travelCase.bitrix_product_snapshot && (
+              <div className="md:col-span-2">
+                <label className="text-sm text-blue-400">Продукт из сделки</label>
+                <div className="mt-1 bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <div className="font-medium text-blue-700">
+                    {travelCase.bitrix_product_snapshot.name || "—"}
+                  </div>
+                  <div className="text-sm text-blue-600 mt-1">
+                    Кол-во: {travelCase.bitrix_product_snapshot.quantity ?? "—"} · Цена:{" "}
+                    {travelCase.bitrix_product_snapshot.price ?? "—"}
+                  </div>
+                  {travelCase.bitrix_product_snapshot.properties &&
+                    Object.keys(travelCase.bitrix_product_snapshot.properties).length > 0 && (
+                      <div className="text-xs text-blue-400 mt-2">
+                        {Object.entries(travelCase.bitrix_product_snapshot.properties).map(
+                          ([key, val]) => (
+                            <span key={key} className="mr-3">
+                              {key}: {String(val)}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    )}
+                </div>
+              </div>
+            )}
             <div>
               <label className="text-sm text-blue-400">Создана</label>
               <div className="mt-1 text-blue-700">

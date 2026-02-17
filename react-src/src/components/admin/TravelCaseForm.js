@@ -8,7 +8,6 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
     visa_type_id: "",
     form_template_id: "",
     user_id: "",
-    status: "new",
   });
   const [visaTypes, setVisaTypes] = useState([]);
   const [formTemplates, setFormTemplates] = useState([]);
@@ -29,7 +28,6 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
         visa_type_id: travelCase.visa_type_id || "",
         form_template_id: travelCase.form_template_id || "",
         user_id: travelCase.user_id || "",
-        status: travelCase.status || "new",
       });
       if (travelCase.visa_type_id) {
         loadFormTemplates(travelCase.visa_type_id);
@@ -82,10 +80,6 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
     
     if (!formData.form_template_id) {
       errors.form_template_id = "Выберите шаблон формы";
-    }
-    
-    if (!formData.status) {
-      errors.status = "Выберите статус";
     }
 
     setValidationErrors(errors);
@@ -231,23 +225,6 @@ function TravelCaseForm({ travelCase, onClose, onSuccess }) {
             {validationErrors.form_template_id && (
               <p className="text-red-500 text-xs mt-1">{validationErrors.form_template_id}</p>
             )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-blue-700 mb-1">
-              Статус
-            </label>
-            <select
-              value={formData.status}
-              onChange={(e) =>
-                setFormData({ ...formData, status: e.target.value })
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-            >
-              <option value="new">Новая</option>
-              <option value="filled">Заполнена</option>
-              <option value="archived">Архив</option>
-            </select>
           </div>
 
           {error && (
