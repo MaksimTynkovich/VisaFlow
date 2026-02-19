@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import FormPreview from "./FormPreview";
+import { apiRequest } from "../../utils/api";
 
 const FIELD_TYPES = [
   { value: "text", label: "Текст" },
@@ -23,6 +24,19 @@ function SchemaEditor({ schema, onChange }) {
   const [fields, setFields] = useState(schema?.fields || []);
   const [editingIndex, setEditingIndex] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [bitrixContactFields, setBitrixContactFields] = useState([]);
+
+  const loadBitrixFields = (refresh = false) => {
+    const url = refresh ? "/api/admin/bitrix/contact-fields?refresh=1" : "/api/admin/bitrix/contact-fields";
+    apiRequest(url)
+      .then((res) => res.ok && res.json())
+      .then((data) => data?.data && setBitrixContactFields(data.data))
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadBitrixFields(false);
+  }, []);
 
   // Синхронизируем fields при изменении schema извне
   React.useEffect(() => {
@@ -87,7 +101,7 @@ function SchemaEditor({ schema, onChange }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-blue-700">Поля формы</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setShowPreview(!showPreview)}
@@ -102,6 +116,16 @@ function SchemaEditor({ schema, onChange }) {
           >
             + Добавить поле
           </button>
+          {bitrixContactFields.length > 0 && (
+            <button
+              type="button"
+              onClick={() => loadBitrixFields(true)}
+              className="px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors text-sm"
+              title="Обновить список полей из Bitrix24 после добавления/удаления полей в контактах"
+            >
+              Обновить поля Bitrix
+            </button>
+          )}
         </div>
       </div>
 
@@ -127,6 +151,7 @@ function SchemaEditor({ schema, onChange }) {
               index < fields.length - 1 ? () => moveField(index, index + 1) : null
             }
             availableFields={getAvailableFields(index)}
+            bitrixContactFields={bitrixContactFields}
           />
         ))}
       </div>
@@ -262,6 +287,7 @@ function FieldEditor({
   onMoveUp,
   onMoveDown,
   availableFields,
+  bitrixContactFields = [],
 }) {
   const [localField, setLocalField] = useState(field);
 
@@ -299,6 +325,7 @@ function FieldEditor({
             Тип: {FIELD_TYPES.find((t) => t.value === field.type)?.label || field.type}
             {field.required && " • Обязательное"}
             {field.when && " • Условное"}
+            {field.bitrix_field && ` • Bitrix: ${field.bitrix_field}`}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -390,6 +417,34 @@ function FieldEditor({
             placeholder="Введите название поля"
           />
         </div>
+
+        {bitrixContactFields.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-blue-700 mb-1">
+              Поле Bitrix24 (контакт)
+            </label>
+            <select
+              value={localField.bitrix_field ?? ""}
+              onChange={(e) =>
+                setLocalField({
+                  ...localField,
+                  bitrix_field: e.target.value ? e.target.value : undefined,
+                })
+              }
+              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+            >
+              <option value="">— не сопоставлять —</option>
+              {bitrixContactFields.map((bf) => (
+                <option key={bf.code} value={bf.code}>
+                  {bf.title} ({bf.code})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-blue-400 mt-1">
+              Для синхронизации с контактом при создании формы из сделки и при отправке формы.
+            </p>
+          </div>
+        )}
 
         {localField.type === "select" && (
           <SelectOptionsEditor

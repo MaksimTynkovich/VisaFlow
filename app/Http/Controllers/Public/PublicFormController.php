@@ -319,11 +319,23 @@ class PublicFormController extends Controller
         // Удаляем черновик после успешной отправки
         $this->formDraftService->deleteDraft($token);
 
-        // Отправляем комментарий в таймлайн сделки Bitrix, если заявка связана со сделкой
+        // Отправляем комментарий в таймлайн сделки Bitrix и обновляем контакт, если заявка связана со сделкой
         if ($travelCase->bitrix_deal_id && config('bitrix.webhook_url')) {
             $payload = $request->input('payload', []);
+            $dealId = (int) $travelCase->bitrix_deal_id;
             $comment = $this->formatBitrixComment($travelCase, $payload, $formResponse);
-            $this->bitrixApi->addDealTimelineComment((int) $travelCase->bitrix_deal_id, $comment);
+            $this->bitrixApi->addDealTimelineComment($dealId, $comment);
+
+            // Обновляем данные контакта в Bitrix данными из формы (заменяем текущие значения, а не добавляем)
+            $contactIds = $this->bitrixApi->getDealContactIds($dealId);
+            if (!empty($contactIds)) {
+                $contactId = $contactIds[0];
+                $existingContact = $this->bitrixApi->getContact($contactId);
+                $contactFields = $this->payloadToBitrixContactFields($travelCase, $payload, $existingContact);
+                if (!empty($contactFields)) {
+                    $this->bitrixApi->updateContact($contactId, $contactFields);
+                }
+            }
         }
 
         return response()->json([
@@ -401,6 +413,112 @@ class PublicFormController extends Controller
             return 'файла';
         }
         return 'файлов';
+    }
+
+    /**
+     * Преобразовать данные формы (payload) в поля контакта Bitrix24 для crm.contact.update.
+     * Для PHONE и EMAIL обновляет существующие записи по ID (замена значения), а не добавляет новые.
+     *
+     * @param array<string, mixed>|null $existingContact Текущие данные контакта из Bitrix (для ID телефонов/email)
+     * @return array<string, mixed>
+     */
+    private function payloadToBitrixContactFields(TravelCase $travelCase, array $payload, ?array $existingContact = null): array
+    {
+        $schema = $travelCase->formTemplate->schema ?? [];
+        $fields = $schema['fields'] ?? [];
+        $mapping = config('bitrix.field_mapping', []);
+        $bitrixFields = [];
+
+        foreach ($fields as $field) {
+            $fieldId = $field['name'] ?? $field['id'] ?? null;
+            if (!$fieldId || !array_key_exists($fieldId, $payload)) {
+                continue;
+            }
+            $value = $payload[$fieldId];
+            if (is_array($value) || $value === null || $value === '') {
+                continue;
+            }
+            $value = trim((string) $value);
+            if ($value === '') {
+                continue;
+            }
+
+            $bitrixField = $field['bitrix_field'] ?? $mapping[$fieldId] ?? $this->guessBitrixFieldFromFormId($fieldId);
+            if (!$bitrixField) {
+                continue;
+            }
+
+            if ($bitrixField === 'PHONE' || $bitrixField === 'EMAIL') {
+                $bitrixFields[$bitrixField] = $this->buildMultifieldUpdate(
+                    $bitrixField,
+                    $value,
+                    $existingContact[$bitrixField] ?? null
+                );
+            } else {
+                $bitrixFields[$bitrixField] = $value;
+            }
+        }
+
+        return $bitrixFields;
+    }
+
+    /**
+     * Собрать массив для обновления мультиполя Bitrix (PHONE/EMAIL): обновить первую запись по ID, остальные удалить.
+     *
+     * @param mixed $existingValues Текущие значения из crm.contact.get (массив объектов с ID, VALUE, VALUE_TYPE)
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildMultifieldUpdate(string $fieldName, string $newValue, mixed $existingValues): array
+    {
+        $items = is_array($existingValues) ? $existingValues : [];
+        $withIds = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $id = $item['ID'] ?? $item['id'] ?? null;
+            if ($id !== null && $id !== '') {
+                $withIds[] = (string) $id;
+            }
+        }
+
+        if (empty($withIds)) {
+            return [['VALUE' => $newValue, 'VALUE_TYPE' => 'WORK']];
+        }
+
+        $result = [];
+        $result[] = ['ID' => (int) $withIds[0], 'VALUE' => $newValue, 'VALUE_TYPE' => 'WORK'];
+        for ($i = 1; $i < count($withIds); $i++) {
+            $result[] = ['ID' => (int) $withIds[$i], 'DELETE' => 'Y'];
+        }
+        return $result;
+    }
+
+    private function guessBitrixFieldFromFormId(string $fieldId): ?string
+    {
+        $normalized = strtolower(str_replace(['-', ' ', '_'], '_', $fieldId));
+        $map = [
+            'first_name' => 'NAME',
+            'last_name' => 'LAST_NAME',
+            'middle_name' => 'SECOND_NAME',
+            'second_name' => 'SECOND_NAME',
+            'phone' => 'PHONE',
+            'email' => 'EMAIL',
+            'address' => 'ADDRESS',
+            'address_city' => 'ADDRESS_CITY',
+            'address_postal_code' => 'ADDRESS_POSTAL_CODE',
+            'address_region' => 'ADDRESS_REGION',
+            'address_country' => 'ADDRESS_COUNTRY',
+            'birthdate' => 'BIRTHDATE',
+            'birth_date' => 'BIRTHDATE',
+            'post' => 'POST',
+            'comments' => 'COMMENTS',
+            'name' => 'NAME',
+            'surname' => 'LAST_NAME',
+            'telephone' => 'PHONE',
+        ];
+
+        return $map[$normalized] ?? null;
     }
 }
 
