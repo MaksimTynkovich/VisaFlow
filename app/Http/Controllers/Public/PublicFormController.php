@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\FormFile;
+use App\Models\FormResponse;
 use App\Models\TravelCase;
 use App\Services\Admin\TravelCaseService;
 use App\Services\Bitrix\BitrixApiService;
@@ -321,7 +322,7 @@ class PublicFormController extends Controller
         // Отправляем комментарий в таймлайн сделки Bitrix, если заявка связана со сделкой
         if ($travelCase->bitrix_deal_id && config('bitrix.webhook_url')) {
             $payload = $request->input('payload', []);
-            $comment = $this->formatBitrixComment($travelCase, $payload);
+            $comment = $this->formatBitrixComment($travelCase, $payload, $formResponse);
             $this->bitrixApi->addDealTimelineComment((int) $travelCase->bitrix_deal_id, $comment);
         }
 
@@ -335,8 +336,9 @@ class PublicFormController extends Controller
 
     /**
      * Форматировать данные формы для комментария в Bitrix: "Название поля — значение".
+     * Для файловых полей добавляются ссылки на файлы.
      */
-    private function formatBitrixComment(TravelCase $travelCase, array $payload): string
+    private function formatBitrixComment(TravelCase $travelCase, array $payload, ?FormResponse $formResponse = null): string
     {
         $schema = $travelCase->formTemplate->schema ?? [];
         $fields = $schema['fields'] ?? [];
@@ -347,6 +349,16 @@ class PublicFormController extends Controller
             if ($id) {
                 $labelMap[$id] = $label;
             }
+        }
+
+        $filesByField = [];
+        if ($formResponse) {
+            $filesByField = $formResponse->files->groupBy('field_id')->map(function ($files) {
+                return $files->map(fn (FormFile $f) => [
+                    'name' => $f->original_name,
+                    'url' => url("/api/public/form/file/{$f->id}"),
+                ])->values()->all();
+            })->all();
         }
 
         $templateName = $travelCase->formTemplate->name ?? '—';
@@ -360,8 +372,16 @@ class PublicFormController extends Controller
         foreach ($payload as $fieldId => $value) {
             $label = $labelMap[$fieldId] ?? $fieldId;
             if (is_array($value)) {
-                $count = count($value);
-                $lines[] = $label . ': загружено ' . $count . ' ' . $this->pluralFiles($count);
+                $fileLinks = $filesByField[$fieldId] ?? [];
+                if (!empty($fileLinks)) {
+                    $lines[] = $label . ':';
+                    foreach ($fileLinks as $file) {
+                        $lines[] = '  • ' . $file['name'] . ': ' . $file['url'];
+                    }
+                } else {
+                    $count = count($value);
+                    $lines[] = $label . ': загружено ' . $count . ' ' . $this->pluralFiles($count);
+                }
             } elseif ($value !== null && $value !== '') {
                 $lines[] = $label . ': ' . $value;
             }
