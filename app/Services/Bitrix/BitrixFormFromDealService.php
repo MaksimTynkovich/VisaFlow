@@ -96,7 +96,7 @@ class BitrixFormFromDealService
             'properties' => $firstProduct['properties'] ?? [],
         ] : null;
 
-        return DB::transaction(function () use (
+        $result = DB::transaction(function () use (
             $dealId,
             $visaTypeId,
             $formTemplateId,
@@ -127,6 +127,13 @@ class BitrixFormFromDealService
                 'token' => $travelCase->public_token,
             ];
         });
+
+        if ($result !== null) {
+            $comment = "Форма создана\n\nСсылка на форму: " . $result['form_url'];
+            $this->bitrixApi->addDealTimelineComment($dealId, $comment);
+        }
+
+        return $result;
     }
 
     /**

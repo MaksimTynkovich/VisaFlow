@@ -2,6 +2,7 @@
 
 namespace App\Services\Bitrix;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -214,5 +215,102 @@ class BitrixApiService
         ]);
 
         return is_numeric($result) ? (int) $result : null;
+    }
+
+    /**
+     * Обновить контакт в Bitrix24.
+     *
+     * @param int $contactId ID контакта в Bitrix
+     * @param array<string, mixed> $fields Поля для обновления (NAME, LAST_NAME, PHONE, EMAIL и т.д.)
+     * @return bool Успешность обновления
+     */
+    public function updateContact(int $contactId, array $fields): bool
+    {
+        $result = $this->call('crm.contact.update', [
+            'id' => $contactId,
+            'fields' => $fields,
+        ]);
+
+        return $result === true;
+    }
+
+    /**
+     * Список полей контакта Bitrix24 для маппинга (код + название).
+     * Кэшируется на 1 час. При добавлении/удалении полей в Bitrix — обновится после истечения кэша или сброса кэша.
+     *
+     * @param bool $refresh При true — сбросить кэш и запросить свежий список из Bitrix
+     * @return array<int, array{code: string, title: string}>
+     */
+    public function getContactFields(bool $refresh = false): array
+    {
+        if (empty($this->webhookUrl)) {
+            return [];
+        }
+
+        $cacheKey = 'bitrix.contact_fields';
+        $ttl = (int) config('bitrix.contact_fields_cache_ttl', 3600);
+
+        if ($refresh) {
+            Cache::forget($cacheKey);
+        }
+
+        return Cache::remember($cacheKey, $ttl, function () {
+            $list = [];
+
+            $standard = $this->call('crm.contact.fields');
+            if (is_array($standard)) {
+                foreach ($standard as $code => $meta) {
+                    if (!is_string($code) || str_starts_with($code, '=')) {
+                        continue;
+                    }
+                    $titleRaw = is_array($meta) ? ($meta['title'] ?? $meta['listLabel'] ?? $meta['listColumnLabel'] ?? null) : null;
+                    $list[] = ['code' => $code, 'title' => $this->extractUserFieldTitle($titleRaw, $code)];
+                }
+            }
+
+            $userFields = $this->call('crm.contact.userfield.list');
+            if (is_array($userFields)) {
+                foreach ($userFields as $key => $uf) {
+                    $code = null;
+                    $titleRaw = null;
+                    if (is_array($uf)) {
+                        $code = $uf['FIELD_NAME'] ?? $uf['fieldName'] ?? $uf['FIELD_ID'] ?? (is_string($key) && str_starts_with((string) $key, 'UF_') ? $key : null);
+                        $titleRaw = $uf['LIST_COLUMN_LABEL'] ?? $uf['EDIT_FORM_LABEL'] ?? $uf['LIST_FILTER_LABEL']
+                            ?? $uf['listColumnLabel'] ?? $uf['editFormLabel'] ?? $uf['listFilterLabel']
+                            ?? $uf['TITLE'] ?? $uf['title'] ?? $uf['label'] ?? $uf['LABEL'] ?? null;
+                    }
+                    if ($code === null || $code === '') {
+                        if (is_string($key) && str_starts_with($key, 'UF_')) {
+                            $code = $key;
+                        } else {
+                            continue;
+                        }
+                    }
+                    $title = $this->extractUserFieldTitle($titleRaw, (string) $code);
+                    $list[] = ['code' => (string) $code, 'title' => $title];
+                }
+            }
+
+            usort($list, fn ($a, $b) => strcasecmp($a['title'], $b['title']));
+            return array_values($list);
+        });
+    }
+
+    /**
+     * Извлечь человекочитаемое название из поля пользовательского поля Bitrix.
+     * Может быть строкой или массивом по языкам (например ['ru' => 'Имя', 'en' => 'Name']).
+     */
+    private function extractUserFieldTitle(mixed $titleRaw, string $code): string
+    {
+        if (is_string($titleRaw) && $titleRaw !== '') {
+            return $titleRaw;
+        }
+        if (is_array($titleRaw)) {
+            $v = $titleRaw['ru'] ?? $titleRaw['en'] ?? reset($titleRaw);
+            if (is_string($v) && $v !== '') {
+                return $v;
+            }
+        }
+        return $code;
     }
 }

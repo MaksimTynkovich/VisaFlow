@@ -40,4 +40,6 @@ Route::prefix('admin')
         Route::get('form-templates/active/list', [\App\Http\Controllers\Admin\FormTemplateController::class, 'active']);
 
         Route::apiResource('travel-cases', \App\Http\Controllers\Admin\TravelCaseController::class);
+
+        Route::get('bitrix/contact-fields', [\App\Http\Controllers\Admin\BitrixController::class, 'contactFields']);
     });
