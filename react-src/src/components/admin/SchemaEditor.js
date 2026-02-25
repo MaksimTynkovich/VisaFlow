@@ -301,20 +301,22 @@ function FieldEditor({
   }, [field]);
 
   const filteredBitrixFields = React.useMemo(() => {
-    if (!bitrixContactFields || bitrixContactFields.length === 0) return [];
+    if (!bitrixContactFields || bitrixContactFields.length === 0) return { list: [], total: 0 };
     const term = bitrixSearch.trim().toLowerCase().replace(/\s+/g, " ");
     let list = bitrixContactFields;
     if (term) {
-      const matchWord = (text) => {
-        const t = text.toLowerCase();
-        if (t.includes(term)) return true;
+      const wordStartsWith = (text) => {
+        const t = String(text || "").toLowerCase();
+        if (t === term || t.startsWith(term)) return true;
         const words = t.split(/\s+/);
         return words.some((w) => w.startsWith(term) || term.startsWith(w));
       };
       list = bitrixContactFields.filter((bf) => {
         const title = (bf.title || "").toLowerCase();
         const code = (bf.code || "").toLowerCase();
-        return title.includes(term) || code.includes(term) || matchWord(bf.title || "") || matchWord(bf.code || "");
+        return title === term || code === term
+          || title.startsWith(term) || code.startsWith(term)
+          || wordStartsWith(bf.title) || wordStartsWith(bf.code);
       });
     }
     const getScore = (bf) => {
@@ -324,9 +326,8 @@ function FieldEditor({
       if (title.startsWith(term) || code.startsWith(term)) return 3;
       const titleWords = title.split(/\s+/);
       const codeWords = code.split(/\s+/);
-      if (titleWords.some((w) => w.startsWith(term) || term.startsWith(w))) return 2;
-      if (codeWords.some((w) => w.startsWith(term) || term.startsWith(w))) return 2;
-      if (title.includes(term) || code.includes(term)) return 1;
+      if (titleWords.some((w) => w.startsWith(term))) return 2;
+      if (codeWords.some((w) => w.startsWith(term))) return 2;
       return 0;
     };
     let result = [...list].sort((a, b) => {
@@ -340,6 +341,10 @@ function FieldEditor({
       if (aIsUf !== bIsUf) return aIsUf ? 1 : -1;
       return String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "accent" });
     });
+    if (term && result.length > 0) {
+      const bestScore = getScore(result[0]);
+      result = result.filter((bf) => getScore(bf) >= bestScore);
+    }
     const selectedCode = localField.bitrix_field;
     if (selectedCode && !result.some((bf) => bf.code === selectedCode)) {
       const selected = bitrixContactFields.find((bf) => bf.code === selectedCode);
