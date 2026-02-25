@@ -345,7 +345,10 @@ function FieldEditor({
       const selected = bitrixContactFields.find((bf) => bf.code === selectedCode);
       if (selected) result = [selected, ...result];
     }
-    return result;
+    const BITRIX_SEARCH_LIMIT = 10;
+    const totalMatchCount = result.length;
+    result = result.slice(0, BITRIX_SEARCH_LIMIT);
+    return { list: result, total: totalMatchCount };
   }, [bitrixContactFields, bitrixSearch, localField.bitrix_field]);
 
   React.useEffect(() => {
@@ -530,7 +533,7 @@ function FieldEditor({
                     — не сопоставлять —
                   </button>
                 </li>
-                {filteredBitrixFields.map((bf) => (
+                {filteredBitrixFields.list.map((bf) => (
                   <li key={bf.code}>
                     <button
                       type="button"
@@ -550,8 +553,14 @@ function FieldEditor({
                     </button>
                   </li>
                 ))}
-                {filteredBitrixFields.length === 0 && (
+                {filteredBitrixFields.list.length === 0 && (
                   <li className="px-3 py-2 text-sm text-blue-400">Ничего не найдено</li>
+                )}
+                {filteredBitrixFields.total > 10 && (
+                  <li className="px-3 py-1.5 text-xs text-blue-400 border-t border-blue-100">
+                    Показано не более 10 из {filteredBitrixFields.total}
+                    {bitrixSearch.trim() ? ", уточните поиск" : ""}
+                  </li>
                 )}
               </ul>
             )}
