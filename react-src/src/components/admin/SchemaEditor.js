@@ -116,16 +116,18 @@ function SchemaEditor({ schema, onChange }) {
           >
             + Добавить поле
           </button>
-          {bitrixContactFields.length > 0 && (
-            <button
-              type="button"
-              onClick={() => loadBitrixFields(true)}
-              className="px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors text-sm"
-              title="Обновить список полей из Bitrix24 после добавления/удаления полей в контактах"
-            >
-              Обновить поля Bitrix
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => loadBitrixFields(true)}
+            className="px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors text-sm"
+            title={
+              bitrixContactFields.length > 0
+                ? "Обновить список полей из Bitrix24 после добавления/удаления полей в контактах"
+                : "Загрузить список полей контакта из Bitrix24 (нужен настроенный webhook)"
+            }
+          >
+            {bitrixContactFields.length > 0 ? "Обновить поля Bitrix" : "Загрузить поля Bitrix"}
+          </button>
         </div>
       </div>
 
@@ -290,10 +292,81 @@ function FieldEditor({
   bitrixContactFields = [],
 }) {
   const [localField, setLocalField] = useState(field);
+  const [bitrixSearch, setBitrixSearch] = useState("");
+  const [bitrixDropdownOpen, setBitrixDropdownOpen] = useState(false);
+  const bitrixDropdownRef = React.useRef(null);
 
   React.useEffect(() => {
     setLocalField(field);
   }, [field]);
+
+  const filteredBitrixFields = React.useMemo(() => {
+    if (!bitrixContactFields || bitrixContactFields.length === 0) return [];
+    const term = bitrixSearch.trim().toLowerCase().replace(/\s+/g, " ");
+    let list = bitrixContactFields;
+    if (term) {
+      const matchWord = (text) => {
+        const t = text.toLowerCase();
+        if (t.includes(term)) return true;
+        const words = t.split(/\s+/);
+        return words.some((w) => w.startsWith(term) || term.startsWith(w));
+      };
+      list = bitrixContactFields.filter((bf) => {
+        const title = (bf.title || "").toLowerCase();
+        const code = (bf.code || "").toLowerCase();
+        return title.includes(term) || code.includes(term) || matchWord(bf.title || "") || matchWord(bf.code || "");
+      });
+    }
+    const getScore = (bf) => {
+      const title = String(bf.title || "").toLowerCase();
+      const code = String(bf.code || "").toLowerCase();
+      if (title === term || code === term) return 4;
+      if (title.startsWith(term) || code.startsWith(term)) return 3;
+      const titleWords = title.split(/\s+/);
+      const codeWords = code.split(/\s+/);
+      if (titleWords.some((w) => w.startsWith(term) || term.startsWith(w))) return 2;
+      if (codeWords.some((w) => w.startsWith(term) || term.startsWith(w))) return 2;
+      if (title.includes(term) || code.includes(term)) return 1;
+      return 0;
+    };
+    let result = [...list].sort((a, b) => {
+      if (term) {
+        const sa = getScore(a);
+        const sb = getScore(b);
+        if (sa !== sb) return sb - sa;
+      }
+      const aIsUf = String(a.code || "").startsWith("UF_");
+      const bIsUf = String(b.code || "").startsWith("UF_");
+      if (aIsUf !== bIsUf) return aIsUf ? 1 : -1;
+      return String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "accent" });
+    });
+    const selectedCode = localField.bitrix_field;
+    if (selectedCode && !result.some((bf) => bf.code === selectedCode)) {
+      const selected = bitrixContactFields.find((bf) => bf.code === selectedCode);
+      if (selected) result = [selected, ...result];
+    }
+    return result;
+  }, [bitrixContactFields, bitrixSearch, localField.bitrix_field]);
+
+  React.useEffect(() => {
+    if (!bitrixDropdownOpen) return;
+    const handleClickOutside = (e) => {
+      if (bitrixDropdownRef.current && !bitrixDropdownRef.current.contains(e.target)) {
+        setBitrixDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [bitrixDropdownOpen]);
+
+  const selectedBitrixField = localField.bitrix_field
+    ? bitrixContactFields.find((bf) => bf.code === localField.bitrix_field)
+    : null;
+  const bitrixDisplayText = bitrixDropdownOpen
+    ? bitrixSearch
+    : selectedBitrixField
+    ? `${selectedBitrixField.title} (${selectedBitrixField.code})`
+    : "";
 
   const handleSave = () => {
     let finalField = { ...localField };
@@ -419,29 +492,71 @@ function FieldEditor({
         </div>
 
         {bitrixContactFields.length > 0 && (
-          <div>
+          <div ref={bitrixDropdownRef} className="relative">
             <label className="block text-sm font-medium text-blue-700 mb-1">
-              Поле Bitrix24 (контакт)
+              Поле Bitrix24 (контакт) — одно поле
             </label>
-            <select
-              value={localField.bitrix_field ?? ""}
-              onChange={(e) =>
-                setLocalField({
-                  ...localField,
-                  bitrix_field: e.target.value ? e.target.value : undefined,
-                })
-              }
-              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-            >
-              <option value="">— не сопоставлять —</option>
-              {bitrixContactFields.map((bf) => (
-                <option key={bf.code} value={bf.code}>
-                  {bf.title} ({bf.code})
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <input
+                type="text"
+                value={bitrixDisplayText}
+                onChange={(e) => {
+                  setBitrixSearch(e.target.value);
+                  setBitrixDropdownOpen(true);
+                }}
+                onFocus={() => {
+                  setBitrixDropdownOpen(true);
+                  if (!bitrixDropdownOpen) setBitrixSearch("");
+                }}
+                placeholder="Поиск по названию или коду поля..."
+                className="w-full py-2 pl-3 pr-8 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-blue-400">
+                {bitrixDropdownOpen ? "▲" : "▼"}
+              </span>
+            </div>
+            {bitrixDropdownOpen && (
+              <ul className="absolute z-20 mt-1 w-full max-h-56 overflow-auto border border-blue-200 rounded-md bg-white shadow-lg py-1">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLocalField({ ...localField, bitrix_field: undefined });
+                      setBitrixSearch("");
+                      setBitrixDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50"
+                  >
+                    — не сопоставлять —
+                  </button>
+                </li>
+                {filteredBitrixFields.map((bf) => (
+                  <li key={bf.code}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLocalField({ ...localField, bitrix_field: bf.code });
+                        setBitrixSearch("");
+                        setBitrixDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm truncate ${
+                        localField.bitrix_field === bf.code
+                          ? "bg-blue-100 text-blue-800 font-medium"
+                          : "text-blue-700 hover:bg-blue-50"
+                      }`}
+                      title={`${bf.title} (${bf.code})`}
+                    >
+                      {bf.title} ({bf.code})
+                    </button>
+                  </li>
+                ))}
+                {filteredBitrixFields.length === 0 && (
+                  <li className="px-3 py-2 text-sm text-blue-400">Ничего не найдено</li>
+                )}
+              </ul>
+            )}
             <p className="text-xs text-blue-400 mt-1">
-              Для синхронизации с контактом при создании формы из сделки и при отправке формы.
+              Выбирается одно поле для синхронизации с контактом при создании формы из сделки и при отправке формы.
             </p>
           </div>
         )}
