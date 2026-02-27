@@ -332,6 +332,13 @@ class PublicFormController extends Controller
                 $contactId = $contactIds[0];
                 $existingContact = $this->bitrixApi->getContact($contactId);
                 $contactFields = $this->payloadToBitrixContactFields($travelCase, $payload, $existingContact);
+
+                // Если в ответе есть загруженные изображения — отправляем одно из них в Bitrix в поле PHOTO (раздел «Фото»)
+                $photoField = $this->buildBitrixContactPhotoField($formResponse);
+                if ($photoField !== null) {
+                    $contactFields['PHOTO'] = $photoField;
+                }
+
                 if (!empty($contactFields)) {
                     $this->bitrixApi->updateContact($contactId, $contactFields);
                 }
@@ -453,6 +460,46 @@ class PublicFormController extends Controller
             return 'файла';
         }
         return 'файлов';
+    }
+
+    /**
+     * Собрать значение для поля PHOTO контакта Bitrix из файлов текущего ответа.
+     * Берём одно изображение (последнее по ID), кодируем в base64 и возвращаем в формате fileData.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function buildBitrixContactPhotoField(?FormResponse $formResponse): ?array
+    {
+        if (!$formResponse) {
+            return null;
+        }
+
+        $imageFile = $formResponse->files()
+            ->where('mime_type', 'like', 'image/%')
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$imageFile) {
+            return null;
+        }
+
+        if (!Storage::disk('public')->exists($imageFile->file_path)) {
+            return null;
+        }
+
+        $path = Storage::disk('public')->path($imageFile->file_path);
+        $content = @file_get_contents($path);
+
+        if ($content === false) {
+            return null;
+        }
+
+        $encoded = base64_encode($content);
+        $fileName = $imageFile->original_name ?: basename($imageFile->file_path);
+
+        return [
+            'fileData' => [$fileName, $encoded],
+        ];
     }
 
     /**
