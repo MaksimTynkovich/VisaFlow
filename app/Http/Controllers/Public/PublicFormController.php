@@ -354,12 +354,35 @@ class PublicFormController extends Controller
     {
         $schema = $travelCase->formTemplate->schema ?? [];
         $fields = $schema['fields'] ?? [];
-        $labelMap = [];
+        $fieldMeta = [];
         foreach ($fields as $field) {
             $id = $field['name'] ?? $field['id'] ?? null;
             $label = $field['label'] ?? $id ?? '';
             if ($id) {
-                $labelMap[$id] = $label;
+                $type = $field['type'] ?? null;
+                $optionsMap = [];
+
+                if ($type === 'select' && !empty($field['options']) && is_array($field['options'])) {
+                    foreach ($field['options'] as $opt) {
+                        if (is_array($opt)) {
+                            $value = $opt['value'] ?? ($opt['label'] ?? null);
+                            $optLabel = $opt['label'] ?? ($opt['value'] ?? null);
+                        } else {
+                            $value = $opt;
+                            $optLabel = $opt;
+                        }
+
+                        if ($value !== null && $value !== '') {
+                            $optionsMap[(string) $value] = (string) $optLabel;
+                        }
+                    }
+                }
+
+                $fieldMeta[$id] = [
+                    'label' => $label,
+                    'type' => $type,
+                    'options' => $optionsMap,
+                ];
             }
         }
 
@@ -382,7 +405,11 @@ class PublicFormController extends Controller
         ];
 
         foreach ($payload as $fieldId => $value) {
-            $label = $labelMap[$fieldId] ?? $fieldId;
+            $meta = $fieldMeta[$fieldId] ?? null;
+            $label = $meta['label'] ?? $fieldId;
+            $type = $meta['type'] ?? null;
+            $options = $meta['options'] ?? [];
+
             if (is_array($value)) {
                 $fileLinks = $filesByField[$fieldId] ?? [];
                 if (!empty($fileLinks)) {
@@ -390,12 +417,25 @@ class PublicFormController extends Controller
                     foreach ($fileLinks as $file) {
                         $lines[] = '  • ' . $file['name'] . ': ' . $file['url'];
                     }
+                } elseif ($type === 'select') {
+                    $displayValues = [];
+                    foreach ($value as $v) {
+                        $displayValues[] = $options[(string) $v] ?? (string) $v;
+                    }
+                    if (!empty($displayValues)) {
+                        $lines[] = $label . ': ' . implode(', ', $displayValues);
+                    }
                 } else {
                     $count = count($value);
                     $lines[] = $label . ': загружено ' . $count . ' ' . $this->pluralFiles($count);
                 }
             } elseif ($value !== null && $value !== '') {
-                $lines[] = $label . ': ' . $value;
+                if ($type === 'select') {
+                    $displayValue = $options[(string) $value] ?? (string) $value;
+                    $lines[] = $label . ': ' . $displayValue;
+                } else {
+                    $lines[] = $label . ': ' . $value;
+                }
             }
         }
 
