@@ -167,12 +167,22 @@ function SchemaEditor({ schema, onChange }) {
   );
 }
 
-function SelectOptionsEditor({ options, onChange }) {
+function SelectOptionsEditor({ options, onChange, showBitrixSecondValue = false }) {
   const normalizedOptions = React.useMemo(
     () =>
-      (options || []).map((opt) =>
-        typeof opt === "string" ? { value: opt, label: opt } : { value: opt.value ?? opt.label ?? "", label: opt.label ?? opt.value ?? "" }
-      ),
+      (options || []).map((opt) => {
+        if (typeof opt === "string") {
+          return { value: opt, label: opt };
+        }
+        const base = {
+          value: opt.value ?? opt.label ?? "",
+          label: opt.label ?? opt.value ?? "",
+        };
+        if (typeof opt.bitrix_second_value !== "undefined") {
+          base.bitrix_second_value = opt.bitrix_second_value ?? "";
+        }
+        return base;
+      }),
     [options]
   );
 
@@ -222,57 +232,86 @@ function SelectOptionsEditor({ options, onChange }) {
           normalizedOptions.map((opt, index) => (
             <div
               key={index}
-              className="flex items-center gap-2 bg-white rounded border border-blue-200 p-2"
+              className={`flex flex-wrap items-center gap-2 bg-white rounded border border-blue-200 p-2 ${showBitrixSecondValue ? "flex-col items-stretch" : ""}`}
             >
-              <span className="text-blue-400 text-sm w-6">{index + 1}.</span>
-              <input
-                type="text"
-                value={opt.label}
-                onChange={(e) => updateOption(index, { label: e.target.value })}
-                placeholder="Текст варианта"
-                className="flex-1 py-1.5 px-2 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-              />
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="text-blue-400 text-sm w-6 shrink-0">{index + 1}.</span>
                 <input
-                type="text"
-                value={opt.value}
-                onChange={(e) => updateOption(index, { value: e.target.value })}
-                placeholder="Значение"
-                className="flex-1 py-1.5 px-2 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-200 outline-none text-blue-600"
-              />
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => moveOption(index, -1)}
-                  disabled={index === 0}
-                  className="p-1.5 text-blue-500 hover:bg-blue-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Вверх"
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moveOption(index, 1)}
-                  disabled={index === normalizedOptions.length - 1}
-                  className="p-1.5 text-blue-500 hover:bg-blue-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Вниз"
-                >
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeOption(index)}
-                  className="p-1.5 text-red-500 hover:bg-red-100 rounded"
-                  title="Удалить"
-                >
-                  ✕
-                </button>
+                  type="text"
+                  value={opt.label}
+                  onChange={(e) => updateOption(index, { label: e.target.value })}
+                  placeholder="Текст варианта"
+                  className="flex-1 min-w-0 py-1.5 px-2 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+                />
+                <input
+                  type="text"
+                  value={opt.value}
+                  onChange={(e) => updateOption(index, { value: e.target.value })}
+                  placeholder="Значение"
+                  className="flex-1 min-w-0 py-1.5 px-2 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-200 outline-none text-blue-600"
+                />
+                <div className="flex gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => moveOption(index, -1)}
+                    disabled={index === 0}
+                    className="p-1.5 text-blue-500 hover:bg-blue-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Вверх"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveOption(index, 1)}
+                    disabled={index === normalizedOptions.length - 1}
+                    className="p-1.5 text-blue-500 hover:bg-blue-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Вниз"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeOption(index)}
+                    className="p-1.5 text-red-500 hover:bg-red-100 rounded"
+                    title="Удалить"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
+              {showBitrixSecondValue && (
+                <div className="pl-8 pr-0 flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={opt.bitrix_second_value !== undefined}
+                      onChange={(e) =>
+                        updateOption(index, {
+                          bitrix_second_value: e.target.checked ? "" : undefined,
+                        })
+                      }
+                      className="w-4 h-4 text-blue-600 border-blue-300 rounded focus:ring-blue-200"
+                    />
+                    <span className="text-sm text-blue-700">Задать второе значение для Bitrix</span>
+                  </label>
+                  {opt.bitrix_second_value !== undefined && (
+                    <input
+                      type="text"
+                      value={opt.bitrix_second_value ?? ""}
+                      onChange={(e) => updateOption(index, { bitrix_second_value: e.target.value })}
+                      placeholder="Второе значение для Bitrix"
+                      className="flex-1 min-w-0 py-1.5 px-2 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-200 outline-none text-blue-600"
+                    />
+                  )}
+                </div>
+              )}
             </div>
           ))
         )}
       </div>
       <p className="text-xs text-blue-400 mt-1">
         «Текст варианта» — что видит пользователь. «Значение» — сохраняется в ответе, задаётся вручную.
+        {showBitrixSecondValue && " Включите «Задать второе значение для Bitrix» только у нужных вариантов; для остальных в Bitrix уйдёт выбранное значение дважды."}
       </p>
     </div>
   );
@@ -421,6 +460,7 @@ function FieldEditor({
             {field.required && " • Обязательное"}
             {field.when && " • Условное"}
             {field.bitrix_field && ` • Bitrix: ${field.bitrix_field}`}
+            {field.bitrix_send_as_multiple && field.type === "select" && " • В Bitrix передаётся два значения"}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -615,7 +655,23 @@ function FieldEditor({
             <SelectOptionsEditor
               options={localField.options || []}
               onChange={(options) => setLocalField({ ...localField, options })}
+              showBitrixSecondValue={!!localField.bitrix_send_as_multiple && !!localField.bitrix_field}
             />
+            {localField.bitrix_field && (
+              <label className="mt-4 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!localField.bitrix_send_as_multiple}
+                  onChange={(e) =>
+                    setLocalField({ ...localField, bitrix_send_as_multiple: e.target.checked })
+                  }
+                  className="w-4 h-4 text-blue-600 border-blue-300 rounded focus:ring-blue-200"
+                />
+                <span className="text-sm text-blue-700">
+                  Поле в Bitrix с множественным выбором — передавать два значения (второе задаётся у каждого варианта ниже)
+                </span>
+              </label>
+            )}
           </div>
         )}
 

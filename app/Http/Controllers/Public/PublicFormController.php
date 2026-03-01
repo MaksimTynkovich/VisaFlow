@@ -541,12 +541,75 @@ class PublicFormController extends Controller
                     $value,
                     $existingContact[$bitrixField] ?? null
                 );
+            } elseif (!empty($field['bitrix_send_as_multiple']) && ($field['type'] ?? '') === 'select') {
+                $second = $this->resolveBitrixSecondValueForOption($value, $field);
+                // Если второе значение не задано (совпадает с первым) — отправляем одно значение, чтобы в Bitrix не дублировалось
+                if ((string) $second === (string) $value) {
+                    $bitrixFields[$bitrixField] = $value;
+                } else {
+                    $values = [$value, $second];
+                    $bitrixFields[$bitrixField] = $this->formatBitrixMultipleListValue($values);
+                }
             } else {
                 $bitrixFields[$bitrixField] = $value;
             }
         }
 
         return $bitrixFields;
+    }
+
+    /**
+     * Формат значения для UF_ поля с множественным выбором в Bitrix24.
+     * По умолчанию — массив, чтобы оба значения записались в мультиселект.
+     *
+     * @param array<int, string> $values Массив значений (ID вариантов списка)
+     * @return array<int, string|int>|string
+     */
+    private function formatBitrixMultipleListValue(array $values): array|string
+    {
+        $values = array_values(array_map('strval', $values));
+        $values = array_filter($values, fn ($v) => $v !== '');
+
+        if (config('bitrix.multiple_list_value_as_string', false)) {
+            return implode(',', $values);
+        }
+
+        $asInteger = config('bitrix.multiple_list_value_as_integer', false);
+        if ($asInteger) {
+            return array_values(array_map(function ($v) {
+                return is_numeric($v) ? (int) $v : $v;
+            }, $values));
+        }
+
+        return array_values($values);
+    }
+
+    /**
+     * Для поля «Выбор» с bitrix_send_as_multiple: второе значение для Bitrix берётся из выбранного варианта (option.bitrix_second_value).
+     * Если у варианта не задано — возвращается выбранное значение (передаём его дважды).
+     */
+    private function resolveBitrixSecondValueForOption(string $selectedValue, array $field): string
+    {
+        $options = $field['options'] ?? [];
+        if (!is_array($options)) {
+            return $selectedValue;
+        }
+        foreach ($options as $opt) {
+            $optValue = null;
+            if (is_array($opt)) {
+                $optValue = $opt['value'] ?? $opt['label'] ?? null;
+            } elseif (is_scalar($opt)) {
+                $optValue = $opt;
+            }
+            if ((string) $optValue === $selectedValue && is_array($opt)) {
+                $second = $opt['bitrix_second_value'] ?? null;
+                if ($second !== null && trim((string) $second) !== '') {
+                    return trim((string) $second);
+                }
+                break;
+            }
+        }
+        return $selectedValue;
     }
 
     /**
