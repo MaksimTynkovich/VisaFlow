@@ -340,7 +340,7 @@ class BitrixApiService
     }
 
     /**
-     * Варианты из пользовательского поля типа список (enumeration).
+     * Варианты из пользовательского поля (enumeration/list/iblock_element).
      *
      * @return array<int, array{value: string, label: string}>
      */
@@ -365,6 +365,9 @@ class BitrixApiService
             return [];
         }
         $type = $userField['USER_TYPE_ID'] ?? $userField['userTypeId'] ?? '';
+        if ($type === 'iblock_element') {
+            return $this->fetchIblockElementValues($userField);
+        }
         if ($type !== 'enumeration' && $type !== 'list') {
             return [];
         }
@@ -382,6 +385,102 @@ class BitrixApiService
             }
         }
         return [];
+    }
+
+    /**
+     * Варианты для пользовательского поля типа iblock_element (уникальные списки).
+     *
+     * @param array<string, mixed> $userField
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function fetchIblockElementValues(array $userField): array
+    {
+        $settings = $userField['SETTINGS'] ?? $userField['settings'] ?? null;
+        if (!is_array($settings)) {
+            return [];
+        }
+
+        $iblockId = $settings['IBLOCK_ID'] ?? $settings['iblockId'] ?? null;
+        $iblockTypeId = $settings['IBLOCK_TYPE_ID'] ?? $settings['iblockTypeId'] ?? 'lists';
+
+        if ($iblockId === null || $iblockId === '') {
+            return [];
+        }
+
+        $options = [];
+        $seenValues = [];
+        $pageSize = 50;
+        $maxPages = 200;
+
+        // Bitrix может возвращать элементы порциями (обычно по 50), поэтому выбираем все страницы.
+        $fetchWithParams = function (array $baseParams) use (&$options, &$seenValues, $pageSize, $maxPages): bool {
+            for ($page = 0; $page < $maxPages; $page++) {
+                $start = $page * $pageSize;
+                $result = $this->call('lists.element.get', array_merge($baseParams, ['start' => $start]));
+                if (!is_array($result) || $result === []) {
+                    return !empty($options);
+                }
+
+                $pageCount = 0;
+                $addedOnPage = 0;
+
+                foreach ($result as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+
+                    $pageCount++;
+
+                    $value = $item['ID'] ?? $item['id'] ?? null;
+                    $label = $item['NAME'] ?? $item['name'] ?? null;
+                    if (is_array($label)) {
+                        $label = reset($label);
+                    }
+                    if (!is_string($label) || $label === '') {
+                        $label = $value !== null ? (string) $value : '';
+                    }
+
+                    if ($value === null || $value === '') {
+                        continue;
+                    }
+
+                    $valueStr = (string) $value;
+                    if (isset($seenValues[$valueStr])) {
+                        continue;
+                    }
+
+                    $seenValues[$valueStr] = true;
+                    $options[] = [
+                        'value' => $valueStr,
+                        'label' => $label,
+                    ];
+                    $addedOnPage++;
+                }
+
+                if ($pageCount < $pageSize || ($start > 0 && $addedOnPage === 0)) {
+                    return true;
+                }
+            }
+
+            return !empty($options);
+        };
+
+        $ok = $fetchWithParams([
+            'IBLOCK_TYPE_ID' => (string) $iblockTypeId,
+            'IBLOCK_ID' => (int) $iblockId,
+            'FILTER' => ['ACTIVE' => 'Y'],
+        ]);
+
+        // Fallback: некоторые порталы ожидают нижний регистр ключей параметров.
+        if (!$ok) {
+            $fetchWithParams([
+                'iblockTypeId' => (string) $iblockTypeId,
+                'iblockId' => (int) $iblockId,
+                'filter' => ['ACTIVE' => 'Y'],
+            ]);
+        }
+
+        return $options;
     }
 
     /**
