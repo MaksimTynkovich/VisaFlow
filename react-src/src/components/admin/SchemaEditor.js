@@ -294,7 +294,21 @@ function FieldEditor({
   const [localField, setLocalField] = useState(field);
   const [bitrixSearch, setBitrixSearch] = useState("");
   const [bitrixDropdownOpen, setBitrixDropdownOpen] = useState(false);
+  const [bitrixOptionsLoading, setBitrixOptionsLoading] = useState(false);
   const bitrixDropdownRef = React.useRef(null);
+
+  const loadBitrixFieldOptions = React.useCallback((fieldCode, applyOptions) => {
+    if (!fieldCode) return;
+    setBitrixOptionsLoading(true);
+    apiRequest(`/api/admin/bitrix/contact-fields/${encodeURIComponent(fieldCode)}/options`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const options = Array.isArray(data?.data) ? data.data : [];
+        applyOptions(options);
+      })
+      .catch(() => {})
+      .finally(() => setBitrixOptionsLoading(false));
+  }, []);
 
   React.useEffect(() => {
     setLocalField(field);
@@ -474,7 +488,15 @@ function FieldEditor({
             </label>
             <select
               value={localField.type || "text"}
-              onChange={(e) => setLocalField({ ...localField, type: e.target.value })}
+              onChange={(e) => {
+                const newType = e.target.value;
+                setLocalField({ ...localField, type: newType });
+                if (newType === "select" && localField.bitrix_field) {
+                  loadBitrixFieldOptions(localField.bitrix_field, (options) =>
+                    setLocalField((prev) => ({ ...prev, type: "select", options }))
+                  );
+                }
+              }}
               className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
             >
               {FIELD_TYPES.map((type) => (
@@ -546,6 +568,11 @@ function FieldEditor({
                         setLocalField({ ...localField, bitrix_field: bf.code });
                         setBitrixSearch("");
                         setBitrixDropdownOpen(false);
+                        if (localField.type === "select") {
+                          loadBitrixFieldOptions(bf.code, (options) =>
+                            setLocalField((prev) => ({ ...prev, bitrix_field: bf.code, options }))
+                          );
+                        }
                       }}
                       className={`w-full text-left px-3 py-2 text-sm truncate ${
                         localField.bitrix_field === bf.code
@@ -576,10 +603,20 @@ function FieldEditor({
         )}
 
         {localField.type === "select" && (
-          <SelectOptionsEditor
-            options={localField.options || []}
-            onChange={(options) => setLocalField({ ...localField, options })}
-          />
+          <div>
+            {bitrixOptionsLoading && (
+              <p className="text-sm text-blue-500 mb-2">Загрузка вариантов из Bitrix24…</p>
+            )}
+            {localField.bitrix_field && !bitrixOptionsLoading && (localField.options?.length > 0) && (
+              <p className="text-xs text-blue-400 mb-2">
+                Варианты загружены из Bitrix24. Можно отредактировать вручную.
+              </p>
+            )}
+            <SelectOptionsEditor
+              options={localField.options || []}
+              onChange={(options) => setLocalField({ ...localField, options })}
+            />
+          </div>
         )}
 
         <div className="flex items-center gap-4">

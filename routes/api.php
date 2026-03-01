@@ -42,4 +42,5 @@ Route::prefix('admin')
         Route::apiResource('travel-cases', \App\Http\Controllers\Admin\TravelCaseController::class);
 
         Route::get('bitrix/contact-fields', [\App\Http\Controllers\Admin\BitrixController::class, 'contactFields']);
+        Route::get('bitrix/contact-fields/{fieldCode}/options', [\App\Http\Controllers\Admin\BitrixController::class, 'contactFieldOptions']);
     });
