@@ -115,6 +115,40 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
                 }
               }
             }
+
+            if (Array.isArray(field.when_any)) {
+              if (field.when_any.length === 0) {
+                errors.schema = `Поле ${fieldId}: 'when_any' не должен быть пустым`;
+              }
+              field.when_any.forEach((condition, conditionIndex) => {
+                if (!condition || typeof condition !== "object") {
+                  errors.schema = `Поле ${fieldId}: условие when_any[${conditionIndex}] должно быть объектом`;
+                  return;
+                }
+
+                if (!condition.field) {
+                  errors.schema = `Поле ${fieldId}: условие when_any[${conditionIndex}] должно содержать 'field'`;
+                }
+
+                if (
+                  condition.equals === undefined &&
+                  condition.not_equals === undefined &&
+                  condition.in === undefined &&
+                  condition.not_in === undefined
+                ) {
+                  errors.schema = `Поле ${fieldId}: условие when_any[${conditionIndex}] должно содержать оператор (equals, not_equals, in, not_in)`;
+                }
+
+                if (condition.field) {
+                  const dependentFieldExists = parsed.fields.some(
+                    (f) => (f.name || f.id) === condition.field
+                  );
+                  if (!dependentFieldExists) {
+                    errors.schema = `Поле ${fieldId}: зависимое поле '${condition.field}' не найдено`;
+                  }
+                }
+              });
+            }
             
             // Проверка select полей
             if (field.type === "select" && !field.options) {

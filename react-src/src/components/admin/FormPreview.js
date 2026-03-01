@@ -3,13 +3,18 @@ import React, { useState } from "react";
 function FormPreview({ schema }) {
   const [formData, setFormData] = useState({});
 
-  // Проверка, должно ли поле быть видимым
-  const isFieldVisible = (field) => {
-    if (!field.when) {
-      return true;
+  const getFieldConditions = (field) => {
+    if (Array.isArray(field.when_any) && field.when_any.length > 0) {
+      return field.when_any;
     }
+    if (field.when) {
+      return [field.when];
+    }
+    return [];
+  };
 
-    const condition = field.when;
+  const evaluateCondition = (condition) => {
+    if (!condition?.field) return false;
     const dependentFieldValue = formData[condition.field];
 
     if (dependentFieldValue === undefined || dependentFieldValue === null || dependentFieldValue === "") {
@@ -32,7 +37,17 @@ function FormPreview({ schema }) {
       return !condition.not_in.includes(dependentFieldValue);
     }
 
-    return true;
+    return false;
+  };
+
+  // Проверка, должно ли поле быть видимым
+  const isFieldVisible = (field) => {
+    const conditions = getFieldConditions(field);
+    if (conditions.length === 0) {
+      return true;
+    }
+    // Логика ветвления: достаточно выполнения любого условия (OR).
+    return conditions.some((condition) => evaluateCondition(condition));
   };
 
   const handleFieldChange = (fieldId, value) => {
