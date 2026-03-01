@@ -267,42 +267,54 @@ function PublicForm() {
     }, 2000); // Сохраняем через 2 секунды после последнего изменения
   }, [token]);
 
-  // Проверка, должно ли поле быть видимым на основе условий
-  const isFieldVisible = (field) => {
-    if (!field.when) {
-      return true; // Поле без условий всегда видимо
+  const getFieldConditions = (field) => {
+    if (Array.isArray(field?.when_any) && field.when_any.length > 0) {
+      return field.when_any;
+    }
+    if (field?.when) {
+      return [field.when];
+    }
+    return [];
+  };
+
+  const evaluateCondition = (condition, data) => {
+    if (!condition?.field) {
+      return false;
     }
 
-    const condition = field.when;
-    const dependentFieldValue = formData[condition.field];
+    const dependentFieldValue = data[condition.field];
 
-    // Если зависимое поле не заполнено, скрываем поле
     if (dependentFieldValue === undefined || dependentFieldValue === null || dependentFieldValue === "") {
       return false;
     }
 
-    // Поддержка оператора equals
     if (condition.equals !== undefined) {
       return dependentFieldValue === condition.equals;
     }
 
-    // Поддержка оператора not_equals
     if (condition.not_equals !== undefined) {
       return dependentFieldValue !== condition.not_equals;
     }
 
-    // Поддержка оператора in (массив значений)
     if (condition.in !== undefined && Array.isArray(condition.in)) {
       return condition.in.includes(dependentFieldValue);
     }
 
-    // Поддержка оператора not_in (массив значений)
     if (condition.not_in !== undefined && Array.isArray(condition.not_in)) {
       return !condition.not_in.includes(dependentFieldValue);
     }
 
-    // Если условие не распознано, показываем поле
-    return true;
+    return false;
+  };
+
+  // Проверка, должно ли поле быть видимым на основе условий
+  const isFieldVisible = (field, data = formData) => {
+    const conditions = getFieldConditions(field);
+    if (conditions.length === 0) {
+      return true; // Поле без условий всегда видимо
+    }
+    // Логика ветвления: поле отображается, если выполнено хотя бы одно условие.
+    return conditions.some((condition) => evaluateCondition(condition, data));
   };
 
   // Обработчик загрузки файлов
@@ -406,21 +418,12 @@ function PublicForm() {
     if (travelCase?.form_template?.schema?.fields) {
       travelCase.form_template.schema.fields.forEach((field) => {
         const fieldId = field.name || field.id;
-        if (field.when && field.when.field === fieldName) {
-          // Если это поле зависит от изменяемого поля, проверяем видимость
-          const condition = field.when;
-          let shouldBeVisible = true;
-          
-          if (condition.equals !== undefined) {
-            shouldBeVisible = value === condition.equals;
-          } else if (condition.not_equals !== undefined) {
-            shouldBeVisible = value !== condition.not_equals;
-          } else if (condition.in !== undefined && Array.isArray(condition.in)) {
-            shouldBeVisible = condition.in.includes(value);
-          } else if (condition.not_in !== undefined && Array.isArray(condition.not_in)) {
-            shouldBeVisible = !condition.not_in.includes(value);
-          }
-          
+        const conditions = getFieldConditions(field);
+        const dependsOnChangedField = conditions.some((condition) => condition?.field === fieldName);
+        if (dependsOnChangedField) {
+          // Если поле зависит от изменяемого, проверяем видимость по всему набору условий (OR).
+          const shouldBeVisible = isFieldVisible(field, newFormData);
+
           // Если поле должно быть скрыто, очищаем его значение
           if (!shouldBeVisible && newFormData[fieldId]) {
             delete newFormData[fieldId];

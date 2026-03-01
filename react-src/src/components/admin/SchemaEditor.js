@@ -20,6 +20,25 @@ const CONDITION_OPERATORS = [
   { value: "not_in", label: "Не одно из значений" },
 ];
 
+const createEmptyCondition = () => ({ field: "", equals: "" });
+
+const getConditionOperator = (condition = {}) => {
+  if (condition.equals !== undefined) return "equals";
+  if (condition.not_equals !== undefined) return "not_equals";
+  if (condition.in !== undefined) return "in";
+  if (condition.not_in !== undefined) return "not_in";
+  return "";
+};
+
+const getConditionValue = (condition = {}) => {
+  const operator = getConditionOperator(condition);
+  if (operator === "equals") return condition.equals ?? "";
+  if (operator === "not_equals") return condition.not_equals ?? "";
+  if (operator === "in") return Array.isArray(condition.in) ? condition.in.join(", ") : "";
+  if (operator === "not_in") return Array.isArray(condition.not_in) ? condition.not_in.join(", ") : "";
+  return "";
+};
+
 function SchemaEditor({ schema, onChange }) {
   const [fields, setFields] = useState(schema?.fields || []);
   const [editingIndex, setEditingIndex] = useState(null);
@@ -441,10 +460,80 @@ function FieldEditor({
     onCancel();
   };
 
-  const handleConditionChange = (updates) => {
-    setLocalField({
-      ...localField,
-      when: { ...localField.when, ...updates },
+  const getLocalConditions = React.useCallback(() => {
+    if (Array.isArray(localField.when_any) && localField.when_any.length > 0) {
+      return localField.when_any;
+    }
+    if (localField.when) {
+      return [localField.when];
+    }
+    return [];
+  }, [localField]);
+
+  const updateConditionAt = (conditionIndex, updater) => {
+    const current = getLocalConditions();
+    const next = [...current];
+    next[conditionIndex] = updater(next[conditionIndex] || createEmptyCondition());
+    const { when, ...rest } = localField;
+    setLocalField({ ...rest, when_any: next });
+  };
+
+  const addCondition = () => {
+    const next = [...getLocalConditions(), createEmptyCondition()];
+    const { when, ...rest } = localField;
+    setLocalField({ ...rest, when_any: next });
+  };
+
+  const removeCondition = (conditionIndex) => {
+    const next = getLocalConditions().filter((_, idx) => idx !== conditionIndex);
+    if (next.length === 0) {
+      const { when, when_any, ...rest } = localField;
+      setLocalField(rest);
+      return;
+    }
+    const { when, ...rest } = localField;
+    setLocalField({ ...rest, when_any: next });
+  };
+
+  const setConditionOperator = (conditionIndex, operator) => {
+    updateConditionAt(conditionIndex, (condition) => {
+      const base = { field: condition.field || "" };
+      if (operator === "equals") return { ...base, equals: "" };
+      if (operator === "not_equals") return { ...base, not_equals: "" };
+      if (operator === "in") return { ...base, in: [] };
+      if (operator === "not_in") return { ...base, not_in: [] };
+      return base;
+    });
+  };
+
+  const setConditionField = (conditionIndex, fieldId) => {
+    updateConditionAt(conditionIndex, (condition) => ({ ...condition, field: fieldId }));
+  };
+
+  const setConditionValue = (conditionIndex, rawValue) => {
+    updateConditionAt(conditionIndex, (condition) => {
+      const operator = getConditionOperator(condition);
+      if (operator === "equals") return { ...condition, equals: rawValue };
+      if (operator === "not_equals") return { ...condition, not_equals: rawValue };
+      if (operator === "in") {
+        return {
+          ...condition,
+          in: rawValue
+            .split(",")
+            .map((v) => v.trim())
+            .filter((v) => v),
+        };
+      }
+      if (operator === "not_in") {
+        return {
+          ...condition,
+          not_in: rawValue
+            .split(",")
+            .map((v) => v.trim())
+            .filter((v) => v),
+        };
+      }
+      return condition;
     });
   };
 
@@ -458,7 +547,7 @@ function FieldEditor({
           <div className="text-xs text-blue-400 mt-1">
             Тип: {FIELD_TYPES.find((t) => t.value === field.type)?.label || field.type}
             {field.required && " • Обязательное"}
-            {field.when && " • Условное"}
+            {(field.when || (Array.isArray(field.when_any) && field.when_any.length > 0)) && " • Условное"}
             {field.bitrix_field && ` • Bitrix: ${field.bitrix_field}`}
             {field.bitrix_send_as_multiple && field.type === "select" && " • В Bitrix передаётся два значения"}
           </div>
@@ -693,15 +782,19 @@ function FieldEditor({
           <label className="flex items-center gap-2 mb-3">
             <input
               type="checkbox"
-              checked={!!localField.when}
+              checked={!!localField.when || (Array.isArray(localField.when_any) && localField.when_any.length > 0)}
               onChange={(e) => {
                 if (e.target.checked) {
-                  setLocalField({
-                    ...localField,
-                    when: { field: "", equals: "" },
-                  });
+                  const currentConditions = getLocalConditions();
+                  if (currentConditions.length > 0) {
+                    const { when, ...rest } = localField;
+                    setLocalField({ ...rest, when_any: currentConditions });
+                  } else {
+                    const { when, ...rest } = localField;
+                    setLocalField({ ...rest, when_any: [createEmptyCondition()] });
+                  }
                 } else {
-                  const { when, ...rest } = localField;
+                  const { when, when_any, ...rest } = localField;
                   setLocalField(rest);
                 }
               }}
@@ -712,130 +805,106 @@ function FieldEditor({
             </span>
           </label>
 
-          {localField.when && (
+          {(!!localField.when || (Array.isArray(localField.when_any) && localField.when_any.length > 0)) && (
             <div className="ml-6 space-y-3 bg-blue-50 p-3 rounded border border-blue-200">
-              <div>
-                <label className="block text-sm font-medium text-blue-700 mb-1">
-                  Поле, от которого зависит отображение
-                </label>
-                <select
-                  value={localField.when.field || ""}
-                  onChange={(e) => handleConditionChange({ field: e.target.value })}
-                  className="w-full py-2 px-3 border border-blue-200 rounded-md bg-white text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-                >
-                  <option value="">Выберите поле</option>
-                  {availableFields.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {getLocalConditions().map((condition, conditionIndex) => {
+                const operator = getConditionOperator(condition);
+                return (
+                  <div
+                    key={conditionIndex}
+                    className="bg-white border border-blue-200 rounded-md p-3 space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium text-blue-700">
+                        Условие {conditionIndex + 1}
+                        {conditionIndex > 0 && " (ИЛИ)"}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeCondition(conditionIndex)}
+                        className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
+                        title="Удалить условие"
+                      >
+                        Удалить
+                      </button>
+                    </div>
 
-              <div>
-                <label className="block text-sm font-medium text-blue-700 mb-1">
-                  Оператор
-                </label>
-                <select
-                  value={
-                    localField.when.equals !== undefined
-                      ? "equals"
-                      : localField.when.not_equals !== undefined
-                      ? "not_equals"
-                      : localField.when.in !== undefined
-                      ? "in"
-                      : localField.when.not_in !== undefined
-                      ? "not_in"
-                      : ""
-                  }
-                  onChange={(e) => {
-                    const operator = e.target.value;
-                    const newWhen = { field: localField.when.field };
-                    if (operator === "equals") {
-                      newWhen.equals = "";
-                    } else if (operator === "not_equals") {
-                      newWhen.not_equals = "";
-                    } else if (operator === "in") {
-                      newWhen.in = [];
-                    } else if (operator === "not_in") {
-                      newWhen.not_in = [];
-                    }
-                    setLocalField({ ...localField, when: newWhen });
-                  }}
-                  className="w-full py-2 px-3 border border-blue-200 rounded-md bg-white text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-                >
-                  <option value="">Выберите оператор</option>
-                  {CONDITION_OPERATORS.map((op) => (
-                    <option key={op.value} value={op.value}>
-                      {op.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                    <div>
+                      <label className="block text-sm font-medium text-blue-700 mb-1">
+                        Поле, от которого зависит отображение
+                      </label>
+                      <select
+                        value={condition.field || ""}
+                        onChange={(e) => setConditionField(conditionIndex, e.target.value)}
+                        className="w-full py-2 px-3 border border-blue-200 rounded-md bg-white text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+                      >
+                        <option value="">Выберите поле</option>
+                        {availableFields.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-              {(localField.when.equals !== undefined ||
-                localField.when.not_equals !== undefined) && (
-                <div>
-                  <label className="block text-sm font-medium text-blue-700 mb-1">
-                    Значение
-                  </label>
-                  <input
-                    type="text"
-                    value={
-                      localField.when.equals !== undefined
-                        ? localField.when.equals
-                        : localField.when.not_equals
-                    }
-                    onChange={(e) => {
-                      if (localField.when.equals !== undefined) {
-                        handleConditionChange({ equals: e.target.value });
-                      } else {
-                        handleConditionChange({ not_equals: e.target.value });
-                      }
-                    }}
-                    className="w-full py-2 px-3 border border-blue-200 rounded-md bg-white text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-                    placeholder="Введите значение"
-                  />
-                </div>
-              )}
+                    <div>
+                      <label className="block text-sm font-medium text-blue-700 mb-1">
+                        Оператор
+                      </label>
+                      <select
+                        value={operator}
+                        onChange={(e) => setConditionOperator(conditionIndex, e.target.value)}
+                        className="w-full py-2 px-3 border border-blue-200 rounded-md bg-white text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+                      >
+                        <option value="">Выберите оператор</option>
+                        {CONDITION_OPERATORS.map((op) => (
+                          <option key={op.value} value={op.value}>
+                            {op.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-              {(localField.when.in !== undefined ||
-                localField.when.not_in !== undefined) && (
-                <div>
-                  <label className="block text-sm font-medium text-blue-700 mb-1">
-                    Значения (через запятую)
-                  </label>
-                  <input
-                    type="text"
-                    value={
-                      Array.isArray(
-                        localField.when.in !== undefined
-                          ? localField.when.in
-                          : localField.when.not_in
-                      )
-                        ? (
-                            localField.when.in !== undefined
-                              ? localField.when.in
-                              : localField.when.not_in
-                          ).join(", ")
-                        : ""
-                    }
-                    onChange={(e) => {
-                      const values = e.target.value
-                        .split(",")
-                        .map((v) => v.trim())
-                        .filter((v) => v);
-                      if (localField.when.in !== undefined) {
-                        handleConditionChange({ in: values });
-                      } else {
-                        handleConditionChange({ not_in: values });
-                      }
-                    }}
-                    className="w-full py-2 px-3 border border-blue-200 rounded-md bg-white text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-                    placeholder="значение1, значение2, значение3"
-                  />
-                </div>
-              )}
+                    {(operator === "equals" || operator === "not_equals") && (
+                      <div>
+                        <label className="block text-sm font-medium text-blue-700 mb-1">
+                          Значение
+                        </label>
+                        <input
+                          type="text"
+                          value={getConditionValue(condition)}
+                          onChange={(e) => setConditionValue(conditionIndex, e.target.value)}
+                          className="w-full py-2 px-3 border border-blue-200 rounded-md bg-white text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+                          placeholder="Введите значение"
+                        />
+                      </div>
+                    )}
+
+                    {(operator === "in" || operator === "not_in") && (
+                      <div>
+                        <label className="block text-sm font-medium text-blue-700 mb-1">
+                          Значения (через запятую)
+                        </label>
+                        <input
+                          type="text"
+                          value={getConditionValue(condition)}
+                          onChange={(e) => setConditionValue(conditionIndex, e.target.value)}
+                          className="w-full py-2 px-3 border border-blue-200 rounded-md bg-white text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+                          placeholder="значение1, значение2, значение3"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={addCondition}
+                className="px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 transition-colors"
+              >
+                + Добавить условие ИЛИ
+              </button>
             </div>
           )}
         </div>
