@@ -297,6 +297,146 @@ class BitrixApiService
     }
 
     /**
+     * Варианты выбора для поля контакта Bitrix (для полей типа список/enumeration).
+     * Используется в редакторе шаблона при выборе типа «Выбор» и привязке к полю Bitrix.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    public function getContactFieldOptions(string $fieldCode): array
+    {
+        if (empty($this->webhookUrl) || $fieldCode === '') {
+            return [];
+        }
+
+        $cacheKey = 'bitrix.contact_field_options.' . $fieldCode;
+        $ttl = (int) config('bitrix.contact_fields_cache_ttl', 3600);
+
+        return Cache::remember($cacheKey, $ttl, function () use ($fieldCode) {
+            $options = $this->fetchStandardFieldItems($fieldCode);
+            if ($options !== []) {
+                return $options;
+            }
+            return $this->fetchUserFieldListValues($fieldCode);
+        });
+    }
+
+    /**
+     * Варианты из стандартного поля контакта (crm.contact.fields), если у поля есть items.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function fetchStandardFieldItems(string $fieldCode): array
+    {
+        $standard = $this->call('crm.contact.fields');
+        if (!is_array($standard) || !isset($standard[$fieldCode]) || !is_array($standard[$fieldCode])) {
+            return [];
+        }
+        $meta = $standard[$fieldCode];
+        $items = $meta['items'] ?? null;
+        if (!is_array($items)) {
+            return [];
+        }
+        return $this->normalizeItemsToOptions($items);
+    }
+
+    /**
+     * Варианты из пользовательского поля типа список (enumeration).
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function fetchUserFieldListValues(string $fieldCode): array
+    {
+        $userFields = $this->call('crm.contact.userfield.list');
+        if (!is_array($userFields)) {
+            return [];
+        }
+        $userField = null;
+        foreach ($userFields as $uf) {
+            if (!is_array($uf)) {
+                continue;
+            }
+            $code = $uf['FIELD_NAME'] ?? $uf['fieldName'] ?? $uf['FIELD_ID'] ?? null;
+            if ($code === $fieldCode) {
+                $userField = $uf;
+                break;
+            }
+        }
+        if ($userField === null) {
+            return [];
+        }
+        $type = $userField['USER_TYPE_ID'] ?? $userField['userTypeId'] ?? '';
+        if ($type !== 'enumeration' && $type !== 'list') {
+            return [];
+        }
+        $list = $userField['LIST'] ?? $userField['list'] ?? null;
+        if (is_array($list)) {
+            return $this->normalizeItemsToOptions($list);
+        }
+        $id = $userField['ID'] ?? $userField['id'] ?? null;
+        if ($id !== null) {
+            $enumList = $this->call('crm.userfield.enumeration.list', [
+                'filter' => ['USER_FIELD_ID' => $id],
+            ]);
+            if (is_array($enumList)) {
+                return $this->normalizeEnumListToOptions($enumList);
+            }
+        }
+        return [];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $items Элементы вида [['ID' => x, 'VALUE' => y] или ['value' => x, 'label' => y]]
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function normalizeItemsToOptions(array $items): array
+    {
+        $options = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $value = $item['ID'] ?? $item['value'] ?? $item['VALUE'] ?? null;
+            $label = $item['VALUE'] ?? $item['label'] ?? $item['title'] ?? null;
+            if ($value === null && $label !== null) {
+                $value = $label;
+            }
+            if ($value !== null && $value !== '') {
+                $options[] = [
+                    'value' => (string) $value,
+                    'label' => $this->extractUserFieldTitle($label, (string) $value),
+                ];
+            }
+        }
+        return $options;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $enumList Ответ crm.userfield.enumeration.list
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function normalizeEnumListToOptions(array $enumList): array
+    {
+        $options = [];
+        foreach ($enumList as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $value = $item['ID'] ?? $item['value'] ?? $item['VALUE'] ?? null;
+            $label = $item['VALUE'] ?? $item['label'] ?? $item['title'] ?? null;
+            if ($value === null && $label !== null) {
+                $value = $label;
+            }
+            if ($value !== null && $value !== '') {
+                $options[] = [
+                    'value' => (string) $value,
+                    'label' => $this->extractUserFieldTitle($label, (string) $value),
+                ];
+            }
+        }
+        return $options;
+    }
+
+    /**
      * Извлечь человекочитаемое название из поля пользовательского поля Bitrix.
      * Может быть строкой или массивом по языкам (например ['ru' => 'Имя', 'en' => 'Name']).
      */

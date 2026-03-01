@@ -27,4 +27,17 @@ class BitrixController extends Controller
             'data' => $fields,
         ]);
     }
+
+    /**
+     * Варианты выбора для поля контакта Bitrix (для полей типа список).
+     * Используется при создании поля «Выбор» с привязкой к полю Bitrix — подгрузка вариантов из Битрикса.
+     */
+    public function contactFieldOptions(string $fieldCode): JsonResponse
+    {
+        $options = $this->bitrixApi->getContactFieldOptions($fieldCode);
+
+        return response()->json([
+            'data' => $options,
+        ]);
+    }
 }
