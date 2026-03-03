@@ -11,6 +11,7 @@ const FIELD_TYPES = [
   { value: "select", label: "Выбор" },
   { value: "textarea", label: "Многострочный текст" },
   { value: "file", label: "Файл" },
+  { value: "step_separator", label: "Разделитель шага" },
 ];
 
 const CONDITION_OPERATORS = [
@@ -113,7 +114,7 @@ function SchemaEditor({ schema, onChange }) {
         label: field.label || field.id || field.name || `Поле ${index + 1}`,
         index,
       }))
-      .filter((_, index) => index < currentIndex); // Только поля, которые идут раньше
+      .filter((f) => f.index < currentIndex && fields[f.index]?.type !== "step_separator"); // Только обычные поля, которые идут раньше
   };
 
   return (
@@ -450,6 +451,18 @@ function FieldEditor({
 
   const handleSave = () => {
     let finalField = { ...localField };
+    if (localField.type === "step_separator") {
+      finalField = {
+        ...finalField,
+        required: false,
+      };
+      delete finalField.options;
+      delete finalField.bitrix_field;
+      delete finalField.bitrix_send_as_multiple;
+      delete finalField.when;
+      delete finalField.when_any;
+      delete finalField.placeholder;
+    }
     if (localField.type === "select" && Array.isArray(localField.options)) {
       finalField.options = localField.options.filter((opt) => {
         const v = typeof opt === "string" ? opt : (opt.value ?? opt.label ?? "");
@@ -542,11 +555,13 @@ function FieldEditor({
       <div className="border border-blue-200 rounded-md p-3 bg-blue-50 flex items-center justify-between">
         <div className="flex-1">
           <div className="font-medium text-blue-700">
-            {field.label || field.id || `Поле ${index + 1}`}
+            {field.type === "step_separator"
+              ? field.label || `Разделитель шага ${index + 1}`
+              : field.label || field.id || `Поле ${index + 1}`}
           </div>
           <div className="text-xs text-blue-400 mt-1">
             Тип: {FIELD_TYPES.find((t) => t.value === field.type)?.label || field.type}
-            {field.required && " • Обязательное"}
+            {field.required && field.type !== "step_separator" && " • Обязательное"}
             {(field.when || (Array.isArray(field.when_any) && field.when_any.length > 0)) && " • Условное"}
             {field.bitrix_field && ` • Bitrix: ${field.bitrix_field}`}
             {field.bitrix_send_as_multiple && field.type === "select" && " • В Bitrix передаётся два значения"}
@@ -639,18 +654,22 @@ function FieldEditor({
 
         <div>
           <label className="block text-sm font-medium text-blue-700 mb-1">
-            Название поля *
+            {localField.type === "step_separator" ? "Название разделителя" : "Название поля *"}
           </label>
           <input
             type="text"
             value={localField.label || ""}
             onChange={(e) => setLocalField({ ...localField, label: e.target.value })}
             className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
-            placeholder="Введите название поля"
+            placeholder={
+              localField.type === "step_separator"
+                ? "Например: Раздел гражданства"
+                : "Введите название поля"
+            }
           />
         </div>
 
-        {localField.type !== "file" && (
+        {localField.type !== "file" && localField.type !== "step_separator" && (
           <div>
             <label className="block text-sm font-medium text-blue-700 mb-1">
               Подсказка в поле (placeholder)
@@ -674,7 +693,7 @@ function FieldEditor({
           </div>
         )}
 
-        {bitrixContactFields.length > 0 && (
+        {localField.type !== "step_separator" && bitrixContactFields.length > 0 && (
           <div ref={bitrixDropdownRef} className="relative">
             <label className="block text-sm font-medium text-blue-700 mb-1">
               Поле Bitrix24 (контакт) — одно поле
@@ -788,7 +807,8 @@ function FieldEditor({
           </div>
         )}
 
-        <div className="flex items-center gap-4">
+        {localField.type !== "step_separator" && (
+          <div className="flex items-center gap-4">
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -800,9 +820,11 @@ function FieldEditor({
             />
             <span className="text-sm text-blue-700">Обязательное поле</span>
           </label>
-        </div>
+          </div>
+        )}
 
-        <div className="border-t border-blue-200 pt-4">
+        {localField.type !== "step_separator" && (
+          <div className="border-t border-blue-200 pt-4">
           <label className="flex items-center gap-2 mb-3">
             <input
               type="checkbox"
@@ -931,7 +953,8 @@ function FieldEditor({
               </button>
             </div>
           )}
-        </div>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-2 border-t border-blue-200">
           <button

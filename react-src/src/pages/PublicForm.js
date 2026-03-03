@@ -1,6 +1,128 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { apiUrl } from "../utils/api";
+
+function SearchableSelect({
+  id,
+  options = [],
+  value,
+  onChange,
+  placeholder,
+  hasError,
+  ariaDescribedBy,
+  ariaInvalid,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const wrapperRef = useRef(null);
+
+  const normalizedOptions = useMemo(
+    () =>
+      (options || []).map((option, index) => {
+        if (typeof option === "string") {
+          return {
+            key: `str_${index}_${option}`,
+            value: option,
+            label: option,
+          };
+        }
+        const optionValue = option?.value ?? option?.label ?? "";
+        const optionLabel = option?.label ?? option?.value ?? "";
+        return {
+          key: `obj_${index}_${optionValue}`,
+          value: String(optionValue),
+          label: String(optionLabel || optionValue),
+        };
+      }),
+    [options]
+  );
+
+  const selectedOption = useMemo(() => {
+    const valueStr = value === undefined || value === null ? "" : String(value);
+    return normalizedOptions.find((opt) => String(opt.value) === valueStr) || null;
+  }, [normalizedOptions, value]);
+
+  useEffect(() => {
+    setSearchText(selectedOption?.label || "");
+  }, [selectedOption?.label]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const query = searchText.trim().toLowerCase();
+  const filteredOptions = useMemo(() => {
+    if (!query) return normalizedOptions;
+    return normalizedOptions.filter((opt) => {
+      const label = String(opt.label || "").toLowerCase();
+      const optionValue = String(opt.value || "").toLowerCase();
+      return label.includes(query) || optionValue.includes(query);
+    });
+  }, [normalizedOptions, query]);
+
+  const shownOptions = filteredOptions.slice(0, 10);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        id={id}
+        type="text"
+        value={searchText}
+        onFocus={() => setIsOpen(true)}
+        onChange={(e) => {
+          setSearchText(e.target.value);
+          setIsOpen(true);
+        }}
+        className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 placeholder:text-blue-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
+          hasError ? "border-red-400 bg-red-50" : "border-blue-200"
+        }`}
+        placeholder={placeholder || "Начните вводить для поиска..."}
+        autoComplete="off"
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
+      />
+
+      {isOpen && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-blue-200 rounded-md shadow-lg max-h-64 overflow-auto">
+          {shownOptions.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-blue-400">Ничего не найдено</div>
+          ) : (
+            shownOptions.map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setSearchText(opt.label);
+                  setIsOpen(false);
+                }}
+                className={`w-full text-left px-3 py-2 text-sm ${
+                  String(value ?? "") === String(opt.value)
+                    ? "bg-blue-100 text-blue-800 font-medium"
+                    : "text-blue-700 hover:bg-blue-50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))
+          )}
+          {filteredOptions.length > 10 && (
+            <div className="px-3 py-1.5 text-xs text-blue-400 border-t border-blue-100">
+              Показано 10 из {filteredOptions.length}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PublicForm() {
   const { token } = useParams();
@@ -18,6 +140,66 @@ function PublicForm() {
   const [formSteps, setFormSteps] = useState([]); // Разбитые на шаги поля
   const [dragActive, setDragActive] = useState({}); // { fieldId: true/false } - состояние drag для каждого поля
   const saveTimeoutRef = useRef(null);
+  const preferredInitialStepRef = useRef(null);
+
+  const hasMeaningfulValue = (value) => {
+    if (value === null || value === undefined) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === "string") return value.trim() !== "";
+    return true;
+  };
+
+  const splitFieldsIntoSteps = (fields) => {
+    if (!Array.isArray(fields) || fields.length === 0) {
+      return [[]];
+    }
+
+    const hasSeparators = fields.some((field) => field?.type === "step_separator");
+    const steps = [];
+
+    if (hasSeparators) {
+      let currentStep = [];
+      fields.forEach((field) => {
+        if (field?.type === "step_separator") {
+          steps.push(currentStep);
+          currentStep = [];
+          return;
+        }
+        currentStep.push(field);
+      });
+      steps.push(currentStep);
+    } else {
+      const fieldsPerStep = 3; // Backward compatibility for old templates without separators.
+      for (let i = 0; i < fields.length; i += fieldsPerStep) {
+        steps.push(fields.slice(i, i + fieldsPerStep));
+      }
+    }
+
+    const normalized = steps.filter((step) => step.length > 0);
+    return normalized.length > 0 ? normalized : [[]];
+  };
+
+  const findLastFilledStepIndex = (fields, data) => {
+    const steps = splitFieldsIntoSteps(fields);
+    if (steps.length === 0) {
+      return 0;
+    }
+
+    let lastFilledStep = 0;
+    steps.forEach((stepFields, stepIndex) => {
+      const stepHasAnyValue = stepFields.some((field) => {
+        const fieldId = field?.name || field?.id;
+        if (!fieldId) return false;
+        return hasMeaningfulValue(data[fieldId]);
+      });
+
+      if (stepHasAnyValue) {
+        lastFilledStep = stepIndex;
+      }
+    });
+
+    return lastFilledStep;
+  };
 
   useEffect(() => {
     loadForm();
@@ -117,15 +299,13 @@ function PublicForm() {
         }
       }
 
+      const schemaFields = formData.data.form_template?.schema?.fields;
+      preferredInitialStepRef.current = findLastFilledStepIndex(
+        Array.isArray(schemaFields) ? schemaFields : [],
+        initialFormData
+      );
+
       setFormData(initialFormData);
-      
-      // Разбиваем поля на шаги после загрузки
-      if (formData.data.form_template?.schema?.fields) {
-        // Используем setTimeout, чтобы убедиться, что состояние обновилось
-        setTimeout(() => {
-          organizeFieldsIntoSteps(formData.data.form_template.schema.fields);
-        }, 0);
-      }
     } catch (e) {
       setError(e.message || "Ошибка загрузки формы");
     } finally {
@@ -133,23 +313,18 @@ function PublicForm() {
     }
   };
 
-  // Организация полей в шаги (по 3 поля на шаг)
+  // Организация полей в шаги (по разделителям или по 3 для старых шаблонов)
   const organizeFieldsIntoSteps = (fields) => {
-    // Сохраняем все поля, видимость будет проверяться динамически при рендеринге
-    const steps = [];
-    const fieldsPerStep = 3; // Показываем по 3 поля на шаг
-    
-    for (let i = 0; i < fields.length; i += fieldsPerStep) {
-      steps.push(fields.slice(i, i + fieldsPerStep));
-    }
-    
-    // Если нет полей, создаем один пустой шаг
-    if (steps.length === 0) {
-      steps.push([]);
-    }
-    
+    const steps = splitFieldsIntoSteps(fields);
+
+    const preferredStep = preferredInitialStepRef.current;
+    const normalizedStep = Number.isInteger(preferredStep)
+      ? Math.max(0, Math.min(preferredStep, steps.length - 1))
+      : 0;
+
     setFormSteps(steps);
-    setCurrentStep(0);
+    setCurrentStep(normalizedStep);
+    preferredInitialStepRef.current = null;
   };
 
   // Инициализация шагов при загрузке формы
@@ -183,6 +358,9 @@ function PublicForm() {
     if (schema && schema.fields && Array.isArray(schema.fields)) {
       schema.fields.forEach((field) => {
         const fieldId = field.name || field.id;
+        if (!fieldId || field.type === "step_separator") {
+          return;
+        }
         if (field.type === "file") {
           initialData[fieldId] = [];
         } else {
@@ -309,6 +487,9 @@ function PublicForm() {
 
   // Проверка, должно ли поле быть видимым на основе условий
   const isFieldVisible = (field, data = formData) => {
+    if (field?.type === "step_separator") {
+      return false;
+    }
     const conditions = getFieldConditions(field);
     if (conditions.length === 0) {
       return true; // Поле без условий всегда видимо
@@ -418,6 +599,9 @@ function PublicForm() {
     if (travelCase?.form_template?.schema?.fields) {
       travelCase.form_template.schema.fields.forEach((field) => {
         const fieldId = field.name || field.id;
+        if (!fieldId || field.type === "step_separator") {
+          return;
+        }
         const conditions = getFieldConditions(field);
         const dependsOnChangedField = conditions.some((condition) => condition?.field === fieldName);
         if (dependsOnChangedField) {
@@ -1010,34 +1194,19 @@ function PublicForm() {
                   )}
                 </div>
               ) : field.type === "select" ? (
-                <select
+                <SearchableSelect
                   id={fieldId}
+                  options={field.options || []}
                   value={fieldValue}
-                  onChange={(e) => handleFieldChange(fieldId, e.target.value, field)}
-                  className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
-                    hasError ? 'border-red-400 bg-red-50' : 'border-blue-200'
-                  }`}
-                  required={field.required}
-                  aria-describedby={[
+                  onChange={(nextValue) => handleFieldChange(fieldId, nextValue, field)}
+                  placeholder={field.placeholder || "— Выберите вариант —"}
+                  hasError={hasError}
+                  ariaDescribedBy={[
                     field.description ? `desc-${fieldId}` : null,
                     hasError ? `error-${fieldId}` : null
                   ].filter(Boolean).join(' ') || undefined}
-                  aria-invalid={hasError}
-                >
-                  <option value="">{field.placeholder || "— Выберите вариант —"}</option>
-                  {field.options &&
-                    field.options.map((option, optIndex) => {
-                      const optionValue =
-                        typeof option === "string" ? option : option.value;
-                      const optionLabel =
-                        typeof option === "string" ? option : option.label;
-                      return (
-                        <option key={optIndex} value={optionValue}>
-                          {optionLabel || optionValue}
-                        </option>
-                      );
-                    })}
-                </select>
+                  ariaInvalid={hasError}
+                />
               ) : field.type === "textarea" ? (
                 <textarea
                   id={fieldId}

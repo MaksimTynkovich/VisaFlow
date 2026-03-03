@@ -91,6 +91,10 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
               errors.schema = `Дублирующийся ID поля: ${fieldId}`;
             }
             fieldIds.add(fieldId);
+
+            if (field.type === "step_separator") {
+              return;
+            }
             
             // Валидация условий
             if (field.when) {

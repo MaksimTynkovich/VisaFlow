@@ -62,14 +62,27 @@ function FormPreview({ schema }) {
     );
   }
 
+  const visibleFields = schema.fields.filter((field) => isFieldVisible(field));
+  const hasVisibleInputFields = visibleFields.some((field) => field.type !== "step_separator");
+
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-blue-700 mb-4">Предпросмотр формы</h3>
       <div className="bg-white rounded-lg border border-blue-200 p-6">
-        {schema.fields
-          .filter((field) => isFieldVisible(field))
-          .map((field, index) => {
+        {visibleFields.map((field, index) => {
             const fieldId = field.id || field.name || `field_${index}`;
+
+            if (field.type === "step_separator") {
+              return (
+                <div key={fieldId} className="my-6 flex items-center gap-3">
+                  <div className="h-px bg-blue-200 flex-1" />
+                  <span className="text-xs text-blue-500 uppercase tracking-wide">
+                    {field.label || "Следующий шаг"}
+                  </span>
+                  <div className="h-px bg-blue-200 flex-1" />
+                </div>
+              );
+            }
 
             return (
               <div key={fieldId} className="mb-4">
@@ -134,7 +147,7 @@ function FormPreview({ schema }) {
             );
           })}
 
-        {schema.fields.filter((field) => isFieldVisible(field)).length === 0 && (
+        {!hasVisibleInputFields && (
           <div className="text-center py-8 text-blue-400">
             <p>Нет видимых полей. Заполните зависимые поля для отображения.</p>
           </div>
