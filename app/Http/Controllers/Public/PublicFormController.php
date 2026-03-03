@@ -116,7 +116,7 @@ class PublicFormController extends Controller
     public function uploadFile(Request $request, string $token): JsonResponse
     {
         $request->validate([
-            'file' => 'required|file|max:10240', // Максимум 10MB
+            'file' => 'required|file|image|max:10240', // Только изображения, максимум 10MB
             'field_id' => 'required|string',
         ]);
 
@@ -331,12 +331,15 @@ class PublicFormController extends Controller
             if (!empty($contactIds)) {
                 $contactId = $contactIds[0];
                 $existingContact = $this->bitrixApi->getContact($contactId);
-                $contactFields = $this->payloadToBitrixContactFields($travelCase, $payload, $existingContact);
+                $contactFields = $this->payloadToBitrixContactFields($travelCase, $payload, $existingContact, $formResponse);
 
-                // Если в ответе есть загруженные изображения — отправляем одно из них в Bitrix в поле PHOTO (раздел «Фото»)
-                $photoField = $this->buildBitrixContactPhotoField($formResponse);
-                if ($photoField !== null) {
-                    $contactFields['PHOTO'] = $photoField;
+                // Fallback: если нет явного маппинга файловых полей в Bitrix-поля,
+                // отправляем одно изображение в стандартное поле PHOTO.
+                if (!$this->hasMappedBitrixFileField($travelCase)) {
+                    $photoField = $this->buildBitrixContactPhotoField($formResponse);
+                    if ($photoField !== null) {
+                        $contactFields['PHOTO'] = $photoField;
+                    }
                 }
 
                 if (!empty($contactFields)) {
@@ -509,7 +512,12 @@ class PublicFormController extends Controller
      * @param array<string, mixed>|null $existingContact Текущие данные контакта из Bitrix (для ID телефонов/email)
      * @return array<string, mixed>
      */
-    private function payloadToBitrixContactFields(TravelCase $travelCase, array $payload, ?array $existingContact = null): array
+    private function payloadToBitrixContactFields(
+        TravelCase $travelCase,
+        array $payload,
+        ?array $existingContact = null,
+        ?FormResponse $formResponse = null
+    ): array
     {
         $schema = $travelCase->formTemplate->schema ?? [];
         $fields = $schema['fields'] ?? [];
@@ -521,17 +529,29 @@ class PublicFormController extends Controller
             if (!$fieldId || !array_key_exists($fieldId, $payload)) {
                 continue;
             }
+
+            $fieldType = $field['type'] ?? null;
+            $bitrixField = $field['bitrix_field'] ?? $mapping[$fieldId] ?? $this->guessBitrixFieldFromFormId($fieldId);
+            if (!$bitrixField) {
+                continue;
+            }
+
+            // Файловые поля отправляем в соответствующие поля Bitrix, а не в общий PHOTO.
+            if ($fieldType === 'file') {
+                $allowMultiple = !empty($field['file_multiple']);
+                $fileFieldValue = $this->buildBitrixMappedFileFieldValue($formResponse, (string) $fieldId, $allowMultiple);
+                if ($fileFieldValue !== null) {
+                    $bitrixFields[$bitrixField] = $fileFieldValue;
+                }
+                continue;
+            }
+
             $value = $payload[$fieldId];
             if (is_array($value) || $value === null || $value === '') {
                 continue;
             }
             $value = trim((string) $value);
             if ($value === '') {
-                continue;
-            }
-
-            $bitrixField = $field['bitrix_field'] ?? $mapping[$fieldId] ?? $this->guessBitrixFieldFromFormId($fieldId);
-            if (!$bitrixField) {
                 continue;
             }
 
@@ -556,6 +576,73 @@ class PublicFormController extends Controller
         }
 
         return $bitrixFields;
+    }
+
+    /**
+     * Есть ли в шаблоне файловые поля с явным маппингом в Bitrix.
+     */
+    private function hasMappedBitrixFileField(TravelCase $travelCase): bool
+    {
+        $schema = $travelCase->formTemplate->schema ?? [];
+        $fields = $schema['fields'] ?? [];
+        foreach ($fields as $field) {
+            $type = $field['type'] ?? null;
+            $bitrixField = $field['bitrix_field'] ?? null;
+            if ($type === 'file' && is_string($bitrixField) && trim($bitrixField) !== '') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Собрать значение файлового поля для crm.contact.update.
+     * single: ['fileData' => [name, base64]]
+     * multiple: [ ['fileData' => [name, base64]], ... ]
+     *
+     * @return array<string, mixed>|array<int, array<string, mixed>>|null
+     */
+    private function buildBitrixMappedFileFieldValue(?FormResponse $formResponse, string $fieldId, bool $allowMultiple): array|null
+    {
+        if (!$formResponse || $fieldId === '') {
+            return null;
+        }
+
+        $files = $formResponse->files()
+            ->where('field_id', $fieldId)
+            ->orderBy('id')
+            ->get();
+
+        if ($files->isEmpty()) {
+            return null;
+        }
+
+        $fileDataItems = [];
+        foreach ($files as $file) {
+            if (!Storage::disk('public')->exists($file->file_path)) {
+                continue;
+            }
+            $path = Storage::disk('public')->path($file->file_path);
+            $content = @file_get_contents($path);
+            if ($content === false) {
+                continue;
+            }
+
+            $fileName = $file->original_name ?: basename($file->file_path);
+            $fileDataItems[] = [
+                'fileData' => [$fileName, base64_encode($content)],
+            ];
+        }
+
+        if (empty($fileDataItems)) {
+            return null;
+        }
+
+        if ($allowMultiple) {
+            return $fileDataItems;
+        }
+
+        return $fileDataItems[count($fileDataItems) - 1];
     }
 
     /**
