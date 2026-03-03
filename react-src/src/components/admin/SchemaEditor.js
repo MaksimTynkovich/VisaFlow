@@ -463,6 +463,10 @@ function FieldEditor({
       delete finalField.when_any;
       delete finalField.placeholder;
     }
+    if (localField.type === "file") {
+      finalField.accept = "image/*";
+      finalField.file_multiple = !!localField.file_multiple;
+    }
     if (localField.type === "select" && Array.isArray(localField.options)) {
       finalField.options = localField.options.filter((opt) => {
         const v = typeof opt === "string" ? opt : (opt.value ?? opt.label ?? "");
@@ -634,7 +638,16 @@ function FieldEditor({
               value={localField.type || "text"}
               onChange={(e) => {
                 const newType = e.target.value;
-                setLocalField({ ...localField, type: newType });
+                if (newType === "file") {
+                  setLocalField({
+                    ...localField,
+                    type: "file",
+                    file_multiple: !!localField.file_multiple,
+                    accept: "image/*",
+                  });
+                } else {
+                  setLocalField({ ...localField, type: newType });
+                }
                 if (newType === "select" && localField.bitrix_field) {
                   loadBitrixFieldOptions(localField.bitrix_field, (options) =>
                     setLocalField((prev) => ({ ...prev, type: "select", options }))
@@ -804,6 +817,32 @@ function FieldEditor({
                 </span>
               </label>
             )}
+          </div>
+        )}
+
+        {localField.type === "file" && (
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-3 space-y-3">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!localField.file_multiple}
+                onChange={(e) =>
+                  setLocalField({
+                    ...localField,
+                    file_multiple: e.target.checked,
+                    accept: "image/*",
+                  })
+                }
+                className="w-4 h-4 text-blue-600 border-blue-300 rounded focus:ring-blue-200"
+              />
+              <span className="text-sm text-blue-700">
+                Разрешить загрузку нескольких фото в одно поле
+              </span>
+            </label>
+            <p className="text-xs text-blue-400">
+              Если выключено — можно загрузить только одно фото (например, страница паспорта).
+              Если включено — можно добавить несколько фото (например, история виз).
+            </p>
           </div>
         )}
 

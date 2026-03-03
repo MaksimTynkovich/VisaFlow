@@ -498,47 +498,92 @@ function PublicForm() {
     return conditions.some((condition) => evaluateCondition(condition, data));
   };
 
+  const isImageFile = (file) => {
+    if (!file) return false;
+    if (typeof file.type === "string" && file.type.startsWith("image/")) {
+      return true;
+    }
+    return /\.(jpg|jpeg|png|gif|webp|bmp|svg|heic|heif|tiff?)$/i.test(file.name || "");
+  };
+
+  const uploadSingleFile = async (fieldId, file) => {
+    const uploadFormData = new FormData();
+    uploadFormData.append("file", file);
+    uploadFormData.append("field_id", fieldId);
+
+    const res = await fetch(apiUrl(`/api/public/form/${token}/upload-file`), {
+      method: "POST",
+      body: uploadFormData,
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data?.error?.message || "Ошибка при загрузке файла");
+    }
+
+    const data = await res.json();
+    return {
+      id: data.data.id,
+      original_name: data.data.original_name,
+      file_size: data.data.file_size,
+      mime_type: data.data.mime_type,
+      url: data.data.url,
+    };
+  };
+
   // Обработчик загрузки файлов
-  const handleFileUpload = async (fieldId, file) => {
+  const handleFileUpload = async (fieldId, files, field) => {
+    const selectedFiles = Array.from(files || []).filter(Boolean);
+    if (selectedFiles.length === 0) {
+      return;
+    }
+
+    const notImageFile = selectedFiles.find((file) => !isImageFile(file));
+    if (notImageFile) {
+      setError("Можно загружать только фотографии (изображения). PDF, архивы и другие форматы запрещены.");
+      return;
+    }
+
+    const allowMultiple = !!field?.file_multiple;
+    const existingFiles = uploadedFiles[fieldId] || [];
+    if (!allowMultiple && existingFiles.length >= 1) {
+      setError("Для этого поля разрешена только одна фотография. Удалите текущий файл перед загрузкой нового.");
+      return;
+    }
+
+    const filesToUpload = allowMultiple ? selectedFiles : [selectedFiles[0]];
+    if (!allowMultiple && selectedFiles.length > 1) {
+      setError("Для этого поля можно загрузить только одно фото. Будет использован первый выбранный файл.");
+    }
+
     setUploadingFiles((prev) => ({ ...prev, [fieldId]: true }));
-    setError("");
-    
+    if (allowMultiple || selectedFiles.length === 1) {
+      setError("");
+    }
+
     try {
-      const uploadFormData = new FormData();
-      uploadFormData.append('file', file);
-      uploadFormData.append('field_id', fieldId);
-
-      const res = await fetch(apiUrl(`/api/public/form/${token}/upload-file`), {
-        method: "POST",
-        body: uploadFormData,
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data?.error?.message || "Ошибка при загрузке файла");
+      const uploadedBatch = [];
+      for (const file of filesToUpload) {
+        const uploadedFile = await uploadSingleFile(fieldId, file);
+        uploadedBatch.push(uploadedFile);
       }
 
-      const data = await res.json();
-      const uploadedFile = {
-        id: data.data.id,
-        original_name: data.data.original_name,
-        file_size: data.data.file_size,
-        mime_type: data.data.mime_type,
-        url: data.data.url,
-      };
+      if (uploadedBatch.length === 0) {
+        return;
+      }
 
       // Добавляем файл в список загруженных для этого поля
       setUploadedFiles((prev) => {
-        const fieldFiles = prev[fieldId] || [];
-        return { ...prev, [fieldId]: [...fieldFiles, uploadedFile] };
+        const fieldFiles = allowMultiple ? (prev[fieldId] || []) : [];
+        return { ...prev, [fieldId]: [...fieldFiles, ...uploadedBatch] };
       });
 
       // Обновляем formData для этого поля
-      const currentFiles = formData[fieldId] || [];
-      const newFormData = {
-        ...formData,
-        [fieldId]: [...currentFiles, uploadedFile.id],
-      };
+      const currentFiles = allowMultiple ? (formData[fieldId] || []) : [];
+      const newFileIds = allowMultiple
+        ? [...currentFiles, ...uploadedBatch.map((f) => f.id)]
+        : [uploadedBatch[0].id];
+      const newFormData = { ...formData, [fieldId]: newFileIds };
       setFormData(newFormData);
       saveDraft(newFormData);
     } catch (e) {
@@ -559,13 +604,13 @@ function PublicForm() {
     }
   };
 
-  const handleDrop = (e, fieldId) => {
+  const handleDrop = (e, fieldId, field) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive((prev) => ({ ...prev, [fieldId]: false }));
 
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileUpload(fieldId, e.dataTransfer.files[0]);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileUpload(fieldId, e.dataTransfer.files, field);
     }
   };
 
@@ -952,6 +997,11 @@ function PublicForm() {
             
             {field.type === "file" ? (
                 <div className="space-y-4">
+                  {(() => {
+                    const currentFilesCount = (uploadedFiles[fieldId] || []).length;
+                    const singleFileLimitReached = !field.file_multiple && currentFilesCount >= 1;
+                    return (
+                      <>
                   {/* Drag and Drop область */}
                   <div
                     className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-all ${
@@ -964,27 +1014,27 @@ function PublicForm() {
                     onDragEnter={(e) => handleDrag(e, fieldId)}
                     onDragLeave={(e) => handleDrag(e, fieldId)}
                     onDragOver={(e) => handleDrag(e, fieldId)}
-                    onDrop={(e) => handleDrop(e, fieldId)}
+                    onDrop={(e) => handleDrop(e, fieldId, field)}
                   >
                     <input
                       id={fieldId}
                       type="file"
+                      multiple={!!field.file_multiple}
                       onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                          handleFileUpload(fieldId, file);
+                        if (e.target.files && e.target.files.length > 0) {
+                          handleFileUpload(fieldId, e.target.files, field);
                         }
                         e.target.value = ""; // Сбрасываем input для возможности повторной загрузки того же файла
                       }}
                       className="hidden"
                       required={field.required && (!formData[fieldId] || formData[fieldId].length === 0)}
-                      accept={field.accept || "*/*"}
+                      accept="image/*"
                       aria-describedby={[
                         field.description ? `desc-${fieldId}` : null,
                         hasError ? `error-${fieldId}` : null
                       ].filter(Boolean).join(' ') || undefined}
                       aria-invalid={hasError}
-                      disabled={isUploading}
+                      disabled={isUploading || singleFileLimitReached}
                     />
                     
                     {isUploading ? (
@@ -1013,19 +1063,23 @@ function PublicForm() {
                         <div>
                           <label
                             htmlFor={fieldId}
-                            className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium underline"
+                            className={`font-medium underline ${
+                              isUploading || singleFileLimitReached
+                                ? "cursor-not-allowed text-blue-300"
+                                : "cursor-pointer text-blue-600 hover:text-blue-700"
+                            }`}
                           >
-                            Нажмите для выбора файла
+                            {singleFileLimitReached
+                              ? "Файл уже загружен. Удалите текущий, чтобы загрузить новый."
+                              : "Нажмите для выбора или перетащите фото сюда"}
                           </label>
-                          <span className="text-blue-400 mx-2">или</span>
-                          <span className="text-blue-400">перетащите файл сюда</span>
                         </div>
-                        <p className="text-sm text-blue-400">
-                          Поддерживаются любые типы файлов
-                        </p>
                       </div>
                     )}
                   </div>
+                  </>
+                    );
+                  })()}
                   {uploadedFiles[fieldId] && uploadedFiles[fieldId].length > 0 && (
                     <div className="mt-3 space-y-3">
                       {uploadedFiles[fieldId].map((file) => {
