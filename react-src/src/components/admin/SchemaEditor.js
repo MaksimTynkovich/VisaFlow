@@ -650,6 +650,30 @@ function FieldEditor({
           />
         </div>
 
+        {localField.type !== "file" && (
+          <div>
+            <label className="block text-sm font-medium text-blue-700 mb-1">
+              Подсказка в поле (placeholder)
+            </label>
+            <input
+              type="text"
+              value={localField.placeholder || ""}
+              onChange={(e) => setLocalField({ ...localField, placeholder: e.target.value })}
+              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              placeholder={
+                localField.type === "select"
+                  ? "Например: Выберите вариант"
+                  : "Например: Введите данные"
+              }
+            />
+            <p className="text-xs text-blue-400 mt-1">
+              {localField.type === "select"
+                ? "Для типа «Выбор» это текст первого пустого варианта."
+                : "Текст показывается в поле до начала ввода."}
+            </p>
+          </div>
+        )}
+
         {bitrixContactFields.length > 0 && (
           <div ref={bitrixDropdownRef} className="relative">
             <label className="block text-sm font-medium text-blue-700 mb-1">

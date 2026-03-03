@@ -1024,7 +1024,7 @@ function PublicForm() {
                   ].filter(Boolean).join(' ') || undefined}
                   aria-invalid={hasError}
                 >
-                  <option value="">— Выберите вариант —</option>
+                  <option value="">{field.placeholder || "— Выберите вариант —"}</option>
                   {field.options &&
                     field.options.map((option, optIndex) => {
                       const optionValue =

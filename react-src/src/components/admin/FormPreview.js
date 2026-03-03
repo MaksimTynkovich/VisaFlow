@@ -93,7 +93,7 @@ function FormPreview({ schema }) {
                     className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
                     required={field.required}
                   >
-                    <option value="">Выберите...</option>
+                    <option value="">{field.placeholder || "Выберите..."}</option>
                     {field.options &&
                       field.options.map((option, optIndex) => {
                         const optionValue =
