@@ -42,6 +42,11 @@ function SearchableSelect({
     return normalizedOptions.find((opt) => String(opt.value) === valueStr) || null;
   }, [normalizedOptions, value]);
 
+  const isSimpleMode = useMemo(
+    () => normalizedOptions.length > 0 && normalizedOptions.length <= 9,
+    [normalizedOptions]
+  );
+
   useEffect(() => {
     setSearchText(selectedOption?.label || "");
   }, [selectedOption?.label]);
@@ -59,59 +64,76 @@ function SearchableSelect({
 
   const query = searchText.trim().toLowerCase();
   const filteredOptions = useMemo(() => {
+    if (isSimpleMode) return normalizedOptions;
     if (!query) return normalizedOptions;
     return normalizedOptions.filter((opt) => {
       const label = String(opt.label || "").toLowerCase();
       const optionValue = String(opt.value || "").toLowerCase();
       return label.includes(query) || optionValue.includes(query);
     });
-  }, [normalizedOptions, query]);
+  }, [normalizedOptions, query, isSimpleMode]);
 
   const shownOptions = filteredOptions.slice(0, 10);
 
   return (
     <div ref={wrapperRef} className="relative">
-      <input
-        id={id}
-        type="text"
-        value={searchText}
-        onFocus={() => setIsOpen(true)}
-        onChange={(e) => {
-          setSearchText(e.target.value);
-          setIsOpen(true);
-        }}
-        className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 placeholder:text-blue-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
-          hasError ? "border-red-400 bg-red-50" : "border-blue-200"
-        }`}
-        placeholder={placeholder || "Начните вводить для поиска..."}
-        autoComplete="off"
-        aria-describedby={ariaDescribedBy}
-        aria-invalid={ariaInvalid}
-      />
+      <div className="relative">
+        <input
+          id={id}
+          type="text"
+          value={searchText}
+          onFocus={() => setIsOpen(true)}
+          onChange={
+            isSimpleMode
+              ? undefined
+              : (e) => {
+                  setSearchText(e.target.value);
+                  setIsOpen(true);
+                }
+          }
+          readOnly={isSimpleMode}
+          className={`w-full py-3 pl-4 pr-10 text-base border rounded-md bg-blue-50 text-blue-700 placeholder:text-blue-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
+            hasError ? "border-red-400 bg-red-50" : "border-blue-200"
+          }`}
+          placeholder={placeholder || (isSimpleMode ? "— Выберите вариант —" : "Начните вводить для поиска...")}
+          autoComplete="off"
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-blue-300">
+          ▼
+        </span>
+      </div>
 
       {isOpen && (
         <div className="absolute z-20 mt-1 w-full bg-white border border-blue-200 rounded-md shadow-lg max-h-64 overflow-auto">
           {shownOptions.length === 0 ? (
             <div className="px-3 py-2 text-sm text-blue-400">Ничего не найдено</div>
           ) : (
-            shownOptions.map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => {
-                  onChange(opt.value);
-                  setSearchText(opt.label);
-                  setIsOpen(false);
-                }}
-                className={`w-full text-left px-3 py-2 text-sm ${
-                  String(value ?? "") === String(opt.value)
-                    ? "bg-blue-100 text-blue-800 font-medium"
-                    : "text-blue-700 hover:bg-blue-50"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))
+            shownOptions.map((opt) => {
+              const isSelected = String(value ?? "") === String(opt.value);
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value);
+                    setSearchText(opt.label);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between ${
+                    isSelected
+                      ? "bg-blue-100 text-blue-800 font-medium"
+                      : "text-blue-700 hover:bg-blue-50"
+                  }`}
+                >
+                  <span className="truncate">{opt.label}</span>
+                  {isSelected && (
+                    <span className="ml-2 text-blue-500 text-xs">✓</span>
+                  )}
+                </button>
+              );
+            })
           )}
           {filteredOptions.length > 10 && (
             <div className="px-3 py-1.5 text-xs text-blue-400 border-t border-blue-100">

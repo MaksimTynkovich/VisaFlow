@@ -229,12 +229,58 @@ function SelectOptionsEditor({ options, onChange, showBitrixSecondValue = false 
     onChange(next);
   };
 
+  const quickSortOptions = () => {
+    if (!normalizedOptions.length) return;
+
+    const raw = window.prompt(
+      "Введите значения, которые нужно поднять вверх, через запятую.\n\n" +
+        "Пример: Беларусь, Украина, Россия"
+    );
+
+    if (!raw) return;
+
+    const priorities = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => s.toLowerCase());
+
+    if (!priorities.length) return;
+
+    const getPriorityIndex = (opt) => {
+      const label = String(opt.label || "").toLowerCase();
+      const value = String(opt.value || "").toLowerCase();
+      const idx = priorities.findIndex(
+        (p) => p === label || p === value
+      );
+      return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+    };
+
+    const sorted = [...normalizedOptions].sort((a, b) => {
+      const pa = getPriorityIndex(a);
+      const pb = getPriorityIndex(b);
+      if (pa !== pb) return pa - pb;
+      return 0;
+    });
+
+    onChange(sorted);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <label className="block text-sm font-medium text-blue-700">
-          Варианты выбора
-        </label>
+        <div className="flex items-center gap-2">
+          <label className="block text-sm font-medium text-blue-700">
+            Варианты выбора
+          </label>
+          <button
+            type="button"
+            onClick={quickSortOptions}
+            className="px-2 py-1 text-xs border border-blue-300 text-blue-600 rounded hover:bg-blue-50 transition-colors"
+          >
+            Быстрая сортировка
+          </button>
+        </div>
         <button
           type="button"
           onClick={addOption}
