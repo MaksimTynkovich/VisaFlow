@@ -100,6 +100,20 @@ function SearchableSelect({
           aria-describedby={ariaDescribedBy}
           aria-invalid={ariaInvalid}
         />
+        {!isSimpleMode && selectedOption && (
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setSearchText("");
+              setIsOpen(false);
+            }}
+            className="absolute inset-y-0 right-7 flex items-center px-1 text-blue-300 hover:text-blue-500 focus:outline-none"
+            aria-label="Очистить выбор"
+          >
+            ✕
+          </button>
+        )}
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-blue-300">
           ▼
         </span>

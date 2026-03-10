@@ -86,7 +86,9 @@ function SchemaEditor({ schema, onChange }) {
 
   const updateField = (index, updates) => {
     const newFields = [...fields];
-    newFields[index] = { ...newFields[index], ...updates };
+    // Полностью заменяем поле на новые данные,
+    // чтобы гарантированно удалить убранные свойства (например, when/when_any)
+    newFields[index] = { ...updates };
     updateFields(newFields);
   };
 
@@ -519,6 +521,13 @@ function FieldEditor({
         return String(v).trim() !== "";
       });
     }
+    // Нормализуем и сохраняем условия отображения только через when_any
+    const conditions = getLocalConditions();
+    delete finalField.when;
+    delete finalField.when_any;
+    if (conditions.length > 0) {
+      finalField.when_any = conditions;
+    }
     onUpdate(finalField);
     onCancel();
   };
@@ -913,7 +922,7 @@ function FieldEditor({
           <label className="flex items-center gap-2 mb-3">
             <input
               type="checkbox"
-              checked={!!localField.when || (Array.isArray(localField.when_any) && localField.when_any.length > 0)}
+              checked={getLocalConditions().length > 0}
               onChange={(e) => {
                 if (e.target.checked) {
                   const currentConditions = getLocalConditions();
