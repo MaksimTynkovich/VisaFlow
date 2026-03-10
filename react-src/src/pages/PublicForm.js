@@ -1439,20 +1439,77 @@ function PublicForm() {
   const isFirstStep = formSteps.length > 0 && (currentStep === firstStepWithVisibleFields || findPrevStepWithVisibleFields(currentStep) === null);
   const totalSteps = formSteps.length;
 
+  // Имя контакта для приветствия: сначала из Bitrix-контакта по сделке, потом из предзаполненных полей формы (только имя)
+  const buildGreetingName = () => {
+    // 1. Пробуем взять из bitrix_contact, который приходит вместе с заявкой
+    const bitrixContact = travelCase?.bitrix_contact;
+    if (bitrixContact) {
+      const firstName =
+        bitrixContact.NAME ||
+        bitrixContact.name ||
+        null;
+      if (firstName) {
+        return String(firstName).trim();
+      }
+    }
+
+    // 2. Фоллбек: пробуем взять из предзаполненных полей формы, которые приходят из Bitrix
+    const firstNameFromForm =
+      formData.first_name ||
+      formData.name ||
+      formData.NAME ||
+      formData.client_first_name ||
+      formData.client_name;
+    if (firstNameFromForm) {
+      return String(firstNameFromForm).trim();
+    }
+
+    return "";
+  };
+
+  const greetingName = buildGreetingName() || "Пожалуйста";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white py-8 px-4 sm:py-12">
-      <div className="max-w-2xl mx-auto">
-        {/* Минималистичный заголовок */}
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl sm:text-3xl font-bold text-blue-700 mb-2">
-            {travelCase?.form_template?.name || "Форма заявки на визу"}
-          </h1>
-          {travelCase?.visa_type && (
-            <p className="text-sm text-blue-400">
-              {travelCase.visa_type.name} ({travelCase.visa_type.country})
-            </p>
-          )}
-        </div>
+      <div className="max-w-4xl mx-auto">
+        {/* Заголовок и описание формы */}
+        {isFirstStep && (
+          <div className="mb-10">
+            <div className="text-center mb-6">
+              <h1 className="text-2xl sm:text-3xl font-bold text-blue-900 mb-3">
+                {greetingName}, заполните анкету для оформления визы
+              </h1>
+            </div>
+            <div className="bg-white/70 backdrop-blur-sm border border-blue-100 rounded-2xl px-4 py-5 sm:px-8 sm:py-6 shadow-sm">
+              <div className="grid gap-4 sm:gap-6 md:grid-cols-3 text-sm text-blue-800">
+                <div className="flex flex-col items-start md:items-stretch">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
+                    Только нужные данные
+                  </div>
+                  <p className="leading-relaxed">
+                    Мы не запрашиваем ничего лишнего: только данные, которые нужны, чтобы подготовить документы и помочь вам открыть визу.
+                  </p>
+                </div>
+                <div className="flex flex-col items-start md:items-stretch">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
+                    Автосохранение
+                  </div>
+                  <p className="leading-relaxed">
+                    Форма автоматически сохраняет введённые данные. Можно закрыть страницу и вернуться к заполнению позже — вся информация останется на месте.
+                  </p>
+                </div>
+                <div className="flex flex-col items-start md:items-stretch">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
+                    Можно вернуться позже
+                  </div>
+                  <p className="leading-relaxed">
+                    Даже после отправки формы вы можете вернуться к ней, изменить уже заполненные данные и доотправить необходимые документы.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {totalSteps > 0 && (
           <div className="mb-6 text-center">
