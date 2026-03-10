@@ -40,6 +40,25 @@ class PublicFormController extends Controller
             ], 404);
         }
 
+        // Дополнительно подтягиваем данные контакта из сделки Bitrix (для приветствия и подсказок)
+        $bitrixContact = null;
+        if ($travelCase->bitrix_deal_id && config('bitrix.webhook_url')) {
+            $dealId = (int) $travelCase->bitrix_deal_id;
+            $contactIds = $this->bitrixApi->getDealContactIds($dealId);
+            if (!empty($contactIds)) {
+                $contact = $this->bitrixApi->getContact($contactIds[0]);
+                if (is_array($contact)) {
+                    $bitrixContact = [
+                        'ID' => $contact['ID'] ?? null,
+                        'NAME' => $contact['NAME'] ?? null,
+                        'SECOND_NAME' => $contact['SECOND_NAME'] ?? null,
+                        'LAST_NAME' => $contact['LAST_NAME'] ?? null,
+                        'POST' => $contact['POST'] ?? null,
+                    ];
+                }
+            }
+        }
+
         return response()->json([
             'data' => [
                 'id' => $travelCase->id,
@@ -54,6 +73,7 @@ class PublicFormController extends Controller
                     'name' => $travelCase->formTemplate->name,
                     'schema' => $travelCase->formTemplate->schema,
                 ],
+                'bitrix_contact' => $bitrixContact,
                 'status' => $travelCase->status,
             ],
         ]);

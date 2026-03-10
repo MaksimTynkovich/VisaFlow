@@ -42,6 +42,11 @@ function SearchableSelect({
     return normalizedOptions.find((opt) => String(opt.value) === valueStr) || null;
   }, [normalizedOptions, value]);
 
+  const isSimpleMode = useMemo(
+    () => normalizedOptions.length > 0 && normalizedOptions.length <= 9,
+    [normalizedOptions]
+  );
+
   useEffect(() => {
     setSearchText(selectedOption?.label || "");
   }, [selectedOption?.label]);
@@ -59,59 +64,90 @@ function SearchableSelect({
 
   const query = searchText.trim().toLowerCase();
   const filteredOptions = useMemo(() => {
+    if (isSimpleMode) return normalizedOptions;
     if (!query) return normalizedOptions;
     return normalizedOptions.filter((opt) => {
       const label = String(opt.label || "").toLowerCase();
       const optionValue = String(opt.value || "").toLowerCase();
       return label.includes(query) || optionValue.includes(query);
     });
-  }, [normalizedOptions, query]);
+  }, [normalizedOptions, query, isSimpleMode]);
 
   const shownOptions = filteredOptions.slice(0, 10);
 
   return (
     <div ref={wrapperRef} className="relative">
-      <input
-        id={id}
-        type="text"
-        value={searchText}
-        onFocus={() => setIsOpen(true)}
-        onChange={(e) => {
-          setSearchText(e.target.value);
-          setIsOpen(true);
-        }}
-        className={`w-full py-3 px-4 text-base border rounded-md bg-blue-50 text-blue-700 placeholder:text-blue-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
-          hasError ? "border-red-400 bg-red-50" : "border-blue-200"
-        }`}
-        placeholder={placeholder || "Начните вводить для поиска..."}
-        autoComplete="off"
-        aria-describedby={ariaDescribedBy}
-        aria-invalid={ariaInvalid}
-      />
+      <div className="relative">
+        <input
+          id={id}
+          type="text"
+          value={searchText}
+          onFocus={() => setIsOpen(true)}
+          onChange={
+            isSimpleMode
+              ? undefined
+              : (e) => {
+                  setSearchText(e.target.value);
+                  setIsOpen(true);
+                }
+          }
+          readOnly={isSimpleMode}
+          className={`w-full py-3 pl-4 pr-10 text-base border rounded-md bg-blue-50 text-blue-700 placeholder:text-blue-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-500 outline-none transition-all ${
+            hasError ? "border-red-400 bg-red-50" : "border-blue-200"
+          }`}
+          placeholder={placeholder || (isSimpleMode ? "— Выберите вариант —" : "Начните вводить для поиска...")}
+          autoComplete="off"
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+        />
+        {!isSimpleMode && selectedOption && (
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setSearchText("");
+              setIsOpen(false);
+            }}
+            className="absolute inset-y-0 right-7 flex items-center px-1 text-blue-300 hover:text-blue-500 focus:outline-none"
+            aria-label="Очистить выбор"
+          >
+            ✕
+          </button>
+        )}
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-blue-300">
+          ▼
+        </span>
+      </div>
 
       {isOpen && (
         <div className="absolute z-20 mt-1 w-full bg-white border border-blue-200 rounded-md shadow-lg max-h-64 overflow-auto">
           {shownOptions.length === 0 ? (
             <div className="px-3 py-2 text-sm text-blue-400">Ничего не найдено</div>
           ) : (
-            shownOptions.map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => {
-                  onChange(opt.value);
-                  setSearchText(opt.label);
-                  setIsOpen(false);
-                }}
-                className={`w-full text-left px-3 py-2 text-sm ${
-                  String(value ?? "") === String(opt.value)
-                    ? "bg-blue-100 text-blue-800 font-medium"
-                    : "text-blue-700 hover:bg-blue-50"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))
+            shownOptions.map((opt) => {
+              const isSelected = String(value ?? "") === String(opt.value);
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value);
+                    setSearchText(opt.label);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between ${
+                    isSelected
+                      ? "bg-blue-100 text-blue-800 font-medium"
+                      : "text-blue-700 hover:bg-blue-50"
+                  }`}
+                >
+                  <span className="truncate">{opt.label}</span>
+                  {isSelected && (
+                    <span className="ml-2 text-blue-500 text-xs">✓</span>
+                  )}
+                </button>
+              );
+            })
           )}
           {filteredOptions.length > 10 && (
             <div className="px-3 py-1.5 text-xs text-blue-400 border-t border-blue-100">
@@ -1403,20 +1439,77 @@ function PublicForm() {
   const isFirstStep = formSteps.length > 0 && (currentStep === firstStepWithVisibleFields || findPrevStepWithVisibleFields(currentStep) === null);
   const totalSteps = formSteps.length;
 
+  // Имя контакта для приветствия: сначала из Bitrix-контакта по сделке, потом из предзаполненных полей формы (только имя)
+  const buildGreetingName = () => {
+    // 1. Пробуем взять из bitrix_contact, который приходит вместе с заявкой
+    const bitrixContact = travelCase?.bitrix_contact;
+    if (bitrixContact) {
+      const firstName =
+        bitrixContact.NAME ||
+        bitrixContact.name ||
+        null;
+      if (firstName) {
+        return String(firstName).trim();
+      }
+    }
+
+    // 2. Фоллбек: пробуем взять из предзаполненных полей формы, которые приходят из Bitrix
+    const firstNameFromForm =
+      formData.first_name ||
+      formData.name ||
+      formData.NAME ||
+      formData.client_first_name ||
+      formData.client_name;
+    if (firstNameFromForm) {
+      return String(firstNameFromForm).trim();
+    }
+
+    return "";
+  };
+
+  const greetingName = buildGreetingName() || "Пожалуйста";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white py-8 px-4 sm:py-12">
-      <div className="max-w-2xl mx-auto">
-        {/* Минималистичный заголовок */}
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl sm:text-3xl font-bold text-blue-700 mb-2">
-            {travelCase?.form_template?.name || "Форма заявки на визу"}
-          </h1>
-          {travelCase?.visa_type && (
-            <p className="text-sm text-blue-400">
-              {travelCase.visa_type.name} ({travelCase.visa_type.country})
-            </p>
-          )}
-        </div>
+      <div className="max-w-4xl mx-auto">
+        {/* Заголовок и описание формы */}
+        {isFirstStep && (
+          <div className="mb-10">
+            <div className="text-center mb-6">
+              <h1 className="text-2xl sm:text-3xl font-bold text-blue-900 mb-3">
+                {greetingName}, заполните анкету для оформления визы
+              </h1>
+            </div>
+            <div className="bg-white/70 backdrop-blur-sm border border-blue-100 rounded-2xl px-4 py-5 sm:px-8 sm:py-6 shadow-sm">
+              <div className="grid gap-4 sm:gap-6 md:grid-cols-3 text-sm text-blue-800">
+                <div className="flex flex-col items-start md:items-stretch">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
+                    Только нужные данные
+                  </div>
+                  <p className="leading-relaxed">
+                    Мы не запрашиваем ничего лишнего: только данные, которые нужны, чтобы подготовить документы и помочь вам открыть визу.
+                  </p>
+                </div>
+                <div className="flex flex-col items-start md:items-stretch">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
+                    Автосохранение
+                  </div>
+                  <p className="leading-relaxed">
+                    Форма автоматически сохраняет введённые данные. Можно закрыть страницу и вернуться к заполнению позже — вся информация останется на месте.
+                  </p>
+                </div>
+                <div className="flex flex-col items-start md:items-stretch">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
+                    Можно вернуться позже
+                  </div>
+                  <p className="leading-relaxed">
+                    Даже после отправки формы вы можете вернуться к ней, изменить уже заполненные данные и доотправить необходимые документы.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {totalSteps > 0 && (
           <div className="mb-6 text-center">
