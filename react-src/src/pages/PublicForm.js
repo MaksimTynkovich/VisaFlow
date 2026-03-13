@@ -400,7 +400,15 @@ function PublicForm() {
         if (field.type === "file") {
           initialData[fieldId] = [];
         } else {
-          initialData[fieldId] = "";
+          // Значение по умолчанию (в т.ч. для select)
+          let defaultValue = "";
+          if (field.default !== undefined && field.default !== null && field.default !== "") {
+            defaultValue = field.default;
+          } else if (field.default_value !== undefined && field.default_value !== null && field.default_value !== "") {
+            // Поддержка альтернативного имени свойства, если оно появится в схемах
+            defaultValue = field.default_value;
+          }
+          initialData[fieldId] = defaultValue;
         }
       });
     }

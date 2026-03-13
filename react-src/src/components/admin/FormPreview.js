@@ -101,7 +101,11 @@ function FormPreview({ schema }) {
                   />
                 ) : field.type === "select" ? (
                   <select
-                    value={formData[fieldId] || ""}
+                    value={
+                      formData[fieldId] !== undefined && formData[fieldId] !== null && formData[fieldId] !== ""
+                        ? formData[fieldId]
+                        : (field.default ?? field.default_value ?? "")
+                    }
                     onChange={(e) => handleFieldChange(fieldId, e.target.value)}
                     className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
                     required={field.required}
