@@ -176,7 +176,7 @@ function PublicForm() {
   const [formSteps, setFormSteps] = useState([]); // Разбитые на шаги поля
   const [dragActive, setDragActive] = useState({}); // { fieldId: true/false } - состояние drag для каждого поля
   const saveTimeoutRef = useRef(null);
-  const preferredInitialStepRef = useRef(null);
+  const preferredInitialStepRef = useRef(null); // Шаг, на котором пользователь заполнял черновик
 
   const hasMeaningfulValue = (value) => {
     if (value === null || value === undefined) return false;
@@ -306,22 +306,36 @@ function PublicForm() {
       if (!hasLastSubmission && draftRes && draftRes.ok) {
         const draftData = await draftRes.json();
         if (draftData.data !== null && draftData.data && draftData.data.form_data) {
-          // Применяем данные из черновика поверх инициализированных данных
-          // Фильтруем только null и undefined значения, остальное применяем
           const draftFormData = draftData.data.form_data;
+
+          // 1. Читаем шаг, на котором пользователь последний раз работал (__meta_current_step)
+          let preferredStep = null;
+          const rawStep = draftFormData.__meta_current_step;
+          if (typeof rawStep === "number") {
+            preferredStep = rawStep;
+          } else if (typeof rawStep === "string" && rawStep.trim() !== "" && !isNaN(rawStep)) {
+            preferredStep = parseInt(rawStep, 10);
+          }
+          preferredInitialStepRef.current =
+            Number.isInteger(preferredStep) && preferredStep >= 0 ? preferredStep : null;
+
+          // 2. Применяем данные из черновика поверх инициализированных данных
+          //    (кроме служебного __meta_current_step)
           const filteredDraftData = {};
           Object.keys(draftFormData).forEach((key) => {
+            if (key === "__meta_current_step") {
+              return;
+            }
             const value = draftFormData[key];
-            // Применяем значение, если оно не null и не undefined
             if (value !== null && value !== undefined) {
               filteredDraftData[key] = value;
             }
           });
-          
+
           // Объединяем данные: сначала инициализированные, потом из черновика
           initialFormData = { ...initialFormData, ...filteredDraftData };
-          
-          // Загружаем файлы из черновика
+
+          // 3. Загружаем файлы из черновика
           if (draftData.data.files && Array.isArray(draftData.data.files)) {
             const filesByField = {};
             draftData.data.files.forEach((file) => {
@@ -335,12 +349,6 @@ function PublicForm() {
         }
       }
 
-      const schemaFields = formData.data.form_template?.schema?.fields;
-      preferredInitialStepRef.current = findLastFilledStepIndex(
-        Array.isArray(schemaFields) ? schemaFields : [],
-        initialFormData
-      );
-
       setFormData(initialFormData);
     } catch (e) {
       setError(e.message || "Ошибка загрузки формы");
@@ -352,23 +360,31 @@ function PublicForm() {
   // Организация полей в шаги (по разделителям или по 3 для старых шаблонов)
   const organizeFieldsIntoSteps = (fields) => {
     const steps = splitFieldsIntoSteps(fields);
-
-    const preferredStep = preferredInitialStepRef.current;
-    const normalizedStep = Number.isInteger(preferredStep)
-      ? Math.max(0, Math.min(preferredStep, steps.length - 1))
-      : 0;
-
     setFormSteps(steps);
-    setCurrentStep(normalizedStep);
+
+    // Определяем стартовый шаг:
+    // 1) если есть preferredInitialStepRef (из черновика) — используем его;
+    // 2) иначе — всегда начинаем с шага 0, даже если дальше уже есть предзаполненные данные.
+    let initialStep = 0;
+    if (Number.isInteger(preferredInitialStepRef.current)) {
+      initialStep = Math.max(
+        0,
+        Math.min(preferredInitialStepRef.current, steps.length - 1)
+      );
+    }
+
+    setCurrentStep(initialStep);
     preferredInitialStepRef.current = null;
   };
 
-  // Инициализация шагов при загрузке формы
+  // Инициализация шагов при загрузке формы:
+  // ждём, пока есть схема и хотя бы один раз заполнены formData (после загрузки/черновика)
   useEffect(() => {
     if (travelCase?.form_template?.schema?.fields && formSteps.length === 0) {
       organizeFieldsIntoSteps(travelCase.form_template.schema.fields);
     }
-  }, [travelCase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [travelCase, formData]);
 
   // Автоматический переход к первому шагу с видимыми полями при изменении шагов
   useEffect(() => {
@@ -461,7 +477,8 @@ function PublicForm() {
   };
 
   // Автосохранение черновика с индикатором
-  const saveDraft = useCallback(async (data) => {
+  // Дополнительно сохраняем номер шага, на котором пользователь редактировал поля
+  const saveDraft = useCallback(async (data, stepIndex = currentStep) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
@@ -470,6 +487,9 @@ function PublicForm() {
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
+        const metaCurrentStep =
+          typeof stepIndex === "number" && stepIndex >= 0 ? stepIndex : currentStep;
+
         await fetch(apiUrl(`/api/public/form/${token}/draft`), {
           method: "POST",
           headers: {
@@ -477,7 +497,10 @@ function PublicForm() {
             Accept: "application/json",
           },
           body: JSON.stringify({
-            form_data: data,
+            form_data: {
+              ...data,
+              __meta_current_step: metaCurrentStep,
+            },
           }),
         });
         // Убираем индикатор сохранения после успешного сохранения
@@ -629,7 +652,8 @@ function PublicForm() {
         : [uploadedBatch[0].id];
       const newFormData = { ...formData, [fieldId]: newFileIds };
       setFormData(newFormData);
-      saveDraft(newFormData);
+      // Сохраняем черновик вместе с информацией о том, на каком шаге редактировали
+      saveDraft(newFormData, currentStep);
     } catch (e) {
       setError(e.message || "Ошибка при загрузке файла");
     } finally {
@@ -720,7 +744,9 @@ function PublicForm() {
     }
     
     setFormData(newFormData);
-    saveDraft(newFormData);
+    // Сохраняем черновик вместе с номером текущего шага — это и есть
+    // "последний шаг, где пользователь редактировал поля"
+    saveDraft(newFormData, currentStep);
   };
 
   const handleSubmit = async (e) => {
