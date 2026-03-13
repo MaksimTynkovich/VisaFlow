@@ -857,6 +857,47 @@ function FieldEditor({
               onChange={(options) => setLocalField({ ...localField, options })}
               showBitrixSecondValue={!!localField.bitrix_send_as_multiple && !!localField.bitrix_field}
             />
+
+            {/* Значение по умолчанию для select */}
+            {Array.isArray(localField.options) && localField.options.length > 0 && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-blue-700 mb-1">
+                  Значение по умолчанию
+                </label>
+                <select
+                  value={
+                    localField.default !== undefined && localField.default !== null
+                      ? String(localField.default)
+                      : ""
+                  }
+                  onChange={(e) =>
+                    setLocalField({
+                      ...localField,
+                      default: e.target.value === "" ? undefined : e.target.value,
+                    })
+                  }
+                  className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+                >
+                  <option value="">— Без значения по умолчанию —</option>
+                  {localField.options.map((opt, idx) => {
+                    const value =
+                      typeof opt === "string" ? opt : (opt.value ?? opt.label ?? "");
+                    const label =
+                      typeof opt === "string" ? opt : (opt.label ?? opt.value ?? "");
+                    const valueStr = String(value);
+                    return (
+                      <option key={idx} value={valueStr}>
+                        {label || valueStr}
+                      </option>
+                    );
+                  })}
+                </select>
+                <p className="text-xs text-blue-400 mt-1">
+                  Этот вариант будет выбран в публичной форме, если у клиента ещё нет сохранённых данных по этому полю.
+                </p>
+              </div>
+            )}
+
             {localField.bitrix_field && (
               <label className="mt-4 flex items-center gap-2">
                 <input

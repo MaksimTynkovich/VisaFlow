@@ -155,8 +155,32 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
             }
             
             // Проверка select полей
-            if (field.type === "select" && !field.options) {
-              errors.schema = `Поле ${fieldId}: select поле должно содержать 'options'`;
+            if (field.type === "select") {
+              if (!field.options) {
+                errors.schema = `Поле ${fieldId}: select поле должно содержать 'options'`;
+              }
+
+              // Если задан default, он должен существовать среди options
+              const defaultValue =
+                field.default !== undefined && field.default !== null
+                  ? field.default
+                  : field.default_value !== undefined && field.default_value !== null
+                  ? field.default_value
+                  : null;
+
+              if (defaultValue !== null && Array.isArray(field.options)) {
+                const hasDefaultInOptions = field.options.some((opt) => {
+                  if (typeof opt === "string") {
+                    return String(opt) === String(defaultValue);
+                  }
+                  const value = opt.value ?? opt.label ?? "";
+                  return String(value) === String(defaultValue);
+                });
+
+                if (!hasDefaultInOptions) {
+                  errors.schema = `Поле ${fieldId}: значение по умолчанию должно совпадать с одним из 'options'`;
+                }
+              }
             }
           });
         }
@@ -426,7 +450,8 @@ function FormTemplateForm({ formTemplate, onClose, onSuccess }) {
       "options": [
         {"value": "passport", "label": "Паспорт"},
         {"value": "id_card_biometric", "label": "ID карта + биометрический"}
-      ]
+      ],
+      "default": "passport"
     },
     {
       "id": "passport_number",
