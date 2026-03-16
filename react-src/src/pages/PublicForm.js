@@ -177,6 +177,8 @@ function PublicForm() {
   const [dragActive, setDragActive] = useState({}); // { fieldId: true/false } - состояние drag для каждого поля
   const saveTimeoutRef = useRef(null);
   const preferredInitialStepRef = useRef(null); // Шаг, на котором пользователь заполнял черновик
+  const [consentAccepted, setConsentAccepted] = useState(false); // Согласие на обработку персональных данных
+  const [consentError, setConsentError] = useState(""); // Ошибка по согласию
 
   const hasMeaningfulValue = (value) => {
     if (value === null || value === undefined) return false;
@@ -752,11 +754,28 @@ function PublicForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setConsentError("");
     setSubmitting(true);
 
     // Отменяем отложенное автосохранение
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Проверяем согласие на обработку персональных данных
+    if (!consentAccepted) {
+      const consentErrorText =
+        "Без согласия на обработку персональных данных дальнейшее заполнение и отправка формы недоступны.";
+      setError(consentErrorText);
+      setConsentError(consentErrorText);
+      setSubmitting(false);
+
+      const consentElement = document.getElementById("consent-checkbox");
+      if (consentElement) {
+        consentElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        consentElement.focus();
+      }
+      return;
     }
 
     // Валидация всех полей перед отправкой
@@ -964,6 +983,21 @@ function PublicForm() {
       e.stopPropagation();
     }
     
+    // Проверяем согласие на обработку персональных данных
+    if (!consentAccepted) {
+      const consentErrorText =
+        "Без согласия на обработку персональных данных дальнейшее заполнение и отправка формы недоступны.";
+      setError(consentErrorText);
+      setConsentError(consentErrorText);
+
+      const consentElement = document.getElementById("consent-checkbox");
+      if (consentElement) {
+        consentElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        consentElement.focus();
+      }
+      return;
+    }
+
     if (validateCurrentStep()) {
       // Проверяем, есть ли следующий шаг с видимыми полями
       const nextStepIndex = findNextStepWithVisibleFields(currentStep);
@@ -1576,6 +1610,39 @@ function PublicForm() {
         <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-6 sm:p-8">
           <form onSubmit={handleSubmit} noValidate>
             {renderFormFields()}
+
+            {/* Согласие на обработку персональных данных */}
+            <div
+              id="consent-checkbox"
+              className="mt-6 pt-4 border-t border-blue-100"
+            >
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 text-blue-600 border-blue-300 rounded focus:ring-blue-300"
+                  checked={consentAccepted}
+                  onChange={(e) => {
+                    setConsentAccepted(e.target.checked);
+                    if (e.target.checked) {
+                      setConsentError("");
+                      if (error) {
+                        setError("");
+                      }
+                    }
+                  }}
+                  aria-required="true"
+                  aria-invalid={!!consentError}
+                />
+                <span className="text-sm text-blue-800">
+                  Заполняя форму, я даю согласие на обработку моих персональных
+                  данных, указанных в данной форме, в соответствии с Политикой
+                  в отношении обработки персональных данных
+                </span>
+              </label>
+              {consentError && (
+                <p className="mt-2 text-sm text-red-600">{consentError}</p>
+              )}
+            </div>
 
             {/* Навигация между шагами */}
             {totalSteps > 1 && (
