@@ -761,6 +761,24 @@ function FieldEditor({
           </div>
         )}
 
+        {localField.type !== "step_separator" && (
+          <div>
+            <label className="block text-sm font-medium text-blue-700 mb-1 mt-4">
+              Подсказка под названием поля
+            </label>
+            <textarea
+              value={localField.description || ""}
+              onChange={(e) => setLocalField({ ...localField, description: e.target.value })}
+              className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none resize-none text-sm"
+              rows={2}
+              placeholder="Например: Обратите внимание, что данные должны совпадать с паспортом"
+            />
+            <p className="text-xs text-blue-400 mt-1">
+              Этот текст будет отображаться под названием поля в публичной анкете, если заполнен.
+            </p>
+          </div>
+        )}
+
         {localField.type !== "step_separator" && bitrixContactFields.length > 0 && (
           <div ref={bitrixDropdownRef} className="relative">
             <label className="block text-sm font-medium text-blue-700 mb-1">
