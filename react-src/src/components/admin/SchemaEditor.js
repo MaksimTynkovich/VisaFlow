@@ -524,8 +524,9 @@ function FieldEditor({
       delete finalField.accept;
     }
     if (localField.type === "file") {
-      finalField.accept = "image/*";
       finalField.file_multiple = !!localField.file_multiple;
+      finalField.allow_any_file_type = !!localField.allow_any_file_type;
+      finalField.accept = finalField.allow_any_file_type ? undefined : "image/*";
     }
     if (localField.type === "select" && Array.isArray(localField.options)) {
       finalField.options = localField.options.filter((opt) => {
@@ -964,19 +965,38 @@ function FieldEditor({
                   setLocalField({
                     ...localField,
                     file_multiple: e.target.checked,
-                    accept: "image/*",
                   })
                 }
                 className="w-4 h-4 text-blue-600 border-blue-300 rounded focus:ring-blue-200"
               />
               <span className="text-sm text-blue-700">
-                Разрешить загрузку нескольких фото в одно поле
+                Разрешить загрузку нескольких файлов в одно поле
               </span>
             </label>
             <p className="text-xs text-blue-400">
-              Если выключено — можно загрузить только одно фото (например, страница паспорта).
-              Если включено — можно добавить несколько фото (например, история виз).
+              Если выключено — можно загрузить только один файл (например, страницу паспорта).
+              Если включено — можно добавить несколько файлов (например, историю виз).
             </p>
+
+            <label className="mt-3 flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={!!localField.allow_any_file_type}
+                onChange={(e) =>
+                  setLocalField({
+                    ...localField,
+                    allow_any_file_type: e.target.checked,
+                  })
+                }
+                className="mt-0.5 w-4 h-4 text-blue-600 border-blue-300 rounded focus:ring-blue-200"
+              />
+              <span className="text-sm text-blue-700">
+                Разрешить загружать другие форматы (PDF, DOCX, ZIP и другие)
+                <span className="block text-xs text-blue-400 mt-0.5">
+                  Если выключено — поле принимает только изображения. Включите для полей где нужны любые файлы.
+                </span>
+              </span>
+            </label>
           </div>
         )}
 

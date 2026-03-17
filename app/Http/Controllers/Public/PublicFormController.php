@@ -135,11 +135,6 @@ class PublicFormController extends Controller
      */
     public function uploadFile(Request $request, string $token): JsonResponse
     {
-        $request->validate([
-            'file' => 'required|file|image|max:10240', // Только изображения, максимум 10MB
-            'field_id' => 'required|string',
-        ]);
-
         $travelCase = $this->travelCaseService->findByToken($token);
 
         if (!$travelCase) {
@@ -161,6 +156,36 @@ class PublicFormController extends Controller
                 ],
             ], 400);
         }
+
+        // Определяем правила валидации для файла на основе схемы шаблона формы.
+        // По умолчанию разрешаем только изображения, как и раньше.
+        $schema = $travelCase->formTemplate->schema ?? [];
+        $fields = $schema['fields'] ?? [];
+        $fieldIdFromRequest = $request->input('field_id');
+
+        $allowAnyFileType = false;
+        if (is_string($fieldIdFromRequest) && !empty($fields) && is_array($fields)) {
+            foreach ($fields as $field) {
+                $id = $field['name'] ?? $field['id'] ?? null;
+                if ($id !== null && (string) $id === (string) $fieldIdFromRequest) {
+                    if (($field['type'] ?? null) === 'file') {
+                        $allowAnyFileType = !empty($field['allow_any_file_type']);
+                    }
+                    break;
+                }
+            }
+        }
+
+        $fileRule = 'required|file|max:10240'; // максимум 10MB
+        if (!$allowAnyFileType) {
+            // Старое поведение: только изображения
+            $fileRule .= '|image';
+        }
+
+        $request->validate([
+            'file' => $fileRule,
+            'field_id' => 'required|string',
+        ]);
 
         $file = $request->file('file');
         $fieldId = $request->input('field_id');

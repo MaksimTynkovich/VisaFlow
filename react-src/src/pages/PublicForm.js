@@ -619,10 +619,15 @@ function PublicForm() {
       return;
     }
 
-    const notImageFile = selectedFiles.find((file) => !isImageFile(file));
-    if (notImageFile) {
-      setError("Можно загружать только фотографии (изображения). PDF, архивы и другие форматы запрещены.");
-      return;
+    const allowAnyFileType = !!field?.allow_any_file_type;
+    if (!allowAnyFileType) {
+      const notImageFile = selectedFiles.find((file) => !isImageFile(file));
+      if (notImageFile) {
+        setError(
+          "Для этого поля можно загружать только фотографии (изображения). PDF, архивы и другие форматы запрещены."
+        );
+        return;
+      }
     }
 
     const allowMultiple = !!field?.file_multiple;
@@ -1171,12 +1176,19 @@ function PublicForm() {
                         e.target.value = ""; // Сбрасываем input для возможности повторной загрузки того же файла
                       }}
                       className="hidden"
-                      required={field.required && (!formData[fieldId] || formData[fieldId].length === 0)}
-                      accept="image/*"
-                      aria-describedby={[
-                        field.description ? `desc-${fieldId}` : null,
-                        hasError ? `error-${fieldId}` : null
-                      ].filter(Boolean).join(' ') || undefined}
+                      required={
+                        field.required &&
+                        (!formData[fieldId] || formData[fieldId].length === 0)
+                      }
+                      accept={field.allow_any_file_type ? undefined : "image/*"}
+                      aria-describedby={
+                        [
+                          field.description ? `desc-${fieldId}` : null,
+                          hasError ? `error-${fieldId}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" ") || undefined
+                      }
                       aria-invalid={hasError}
                       disabled={isUploading || singleFileLimitReached}
                     />
