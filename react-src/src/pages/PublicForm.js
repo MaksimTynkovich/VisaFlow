@@ -1634,9 +1634,25 @@ function PublicForm() {
                   aria-invalid={!!consentError}
                 />
                 <span className="text-sm text-blue-800">
-                  Заполняя форму, я даю согласие на обработку моих персональных
-                  данных, указанных в данной форме, в соответствии с Политикой
-                  в отношении обработки персональных данных
+                  Заполняя форму, я подтверждаю, что ознакомлен(а) и принимаю{" "}
+                  <a
+                    href="https://visavisa.by/prochee/soglasie-na-obrabotku-personalnyix-dannyix.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-blue-600 hover:text-blue-800"
+                  >
+                    Согласие на обработку персональных данных
+                  </a>{" "}
+                  и{" "}
+                  <a
+                    href="https://visavisa.by/prochee/politika-obrabotki-personalnyix-dannyix.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-blue-600 hover:text-blue-800"
+                  >
+                    Политику в отношении обработки персональных данных
+                  </a>
+                  .
                 </span>
               </label>
               {consentError && (
