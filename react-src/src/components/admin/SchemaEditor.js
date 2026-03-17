@@ -12,6 +12,7 @@ const FIELD_TYPES = [
   { value: "textarea", label: "Многострочный текст" },
   { value: "file", label: "Файл" },
   { value: "step_separator", label: "Разделитель шага" },
+  { value: "hint_block", label: "Текстовый блок-подсказка" },
 ];
 
 const CONDITION_OPERATORS = [
@@ -511,6 +512,17 @@ function FieldEditor({
       delete finalField.when_any;
       delete finalField.placeholder;
     }
+    if (localField.type === "hint_block") {
+      finalField = {
+        ...finalField,
+        required: false,
+      };
+      delete finalField.options;
+      delete finalField.bitrix_field;
+      delete finalField.bitrix_send_as_multiple;
+      delete finalField.file_multiple;
+      delete finalField.accept;
+    }
     if (localField.type === "file") {
       finalField.accept = "image/*";
       finalField.file_multiple = !!localField.file_multiple;
@@ -722,7 +734,11 @@ function FieldEditor({
 
         <div>
           <label className="block text-sm font-medium text-blue-700 mb-1">
-            {localField.type === "step_separator" ? "Название разделителя" : "Название поля *"}
+            {localField.type === "step_separator"
+              ? "Название разделителя"
+              : localField.type === "hint_block"
+              ? "Заголовок блока-подсказки"
+              : "Название поля *"}
           </label>
           <input
             type="text"
@@ -732,12 +748,16 @@ function FieldEditor({
             placeholder={
               localField.type === "step_separator"
                 ? "Например: Раздел гражданства"
+                : localField.type === "hint_block"
+                ? "Например: Важная информация по этому блоку"
                 : "Введите название поля"
             }
           />
         </div>
 
-        {localField.type !== "file" && localField.type !== "step_separator" && (
+        {localField.type !== "file" &&
+          localField.type !== "step_separator" &&
+          localField.type !== "hint_block" && (
           <div>
             <label className="block text-sm font-medium text-blue-700 mb-1">
               Подсказка в поле (placeholder)
@@ -761,7 +781,7 @@ function FieldEditor({
           </div>
         )}
 
-        {localField.type !== "step_separator" && (
+        {localField.type !== "step_separator" && localField.type !== "hint_block" && (
           <div>
             <label className="block text-sm font-medium text-blue-700 mb-1 mt-4">
               Подсказка под названием поля
@@ -779,7 +799,7 @@ function FieldEditor({
           </div>
         )}
 
-        {localField.type !== "step_separator" && bitrixContactFields.length > 0 && (
+        {localField.type !== "step_separator" && localField.type !== "hint_block" && bitrixContactFields.length > 0 && (
           <div ref={bitrixDropdownRef} className="relative">
             <label className="block text-sm font-medium text-blue-700 mb-1">
               Поле Bitrix24 (контакт) — одно поле
@@ -960,7 +980,7 @@ function FieldEditor({
           </div>
         )}
 
-        {localField.type !== "step_separator" && (
+        {localField.type !== "step_separator" && localField.type !== "hint_block" && (
           <div className="flex items-center gap-4">
           <label className="flex items-center gap-2">
             <input

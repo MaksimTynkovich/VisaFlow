@@ -412,7 +412,11 @@ function PublicForm() {
     if (schema && schema.fields && Array.isArray(schema.fields)) {
       schema.fields.forEach((field) => {
         const fieldId = field.name || field.id;
-        if (!fieldId || field.type === "step_separator") {
+        if (
+          !fieldId ||
+          field.type === "step_separator" ||
+          field.type === "hint_block"
+        ) {
           return;
         }
         if (field.type === "file") {
@@ -420,9 +424,17 @@ function PublicForm() {
         } else {
           // Значение по умолчанию (в т.ч. для select)
           let defaultValue = "";
-          if (field.default !== undefined && field.default !== null && field.default !== "") {
+          if (
+            field.default !== undefined &&
+            field.default !== null &&
+            field.default !== ""
+          ) {
             defaultValue = field.default;
-          } else if (field.default_value !== undefined && field.default_value !== null && field.default_value !== "") {
+          } else if (
+            field.default_value !== undefined &&
+            field.default_value !== null &&
+            field.default_value !== ""
+          ) {
             // Поддержка альтернативного имени свойства, если оно появится в схемах
             defaultValue = field.default_value;
           }
@@ -781,11 +793,14 @@ function PublicForm() {
     // Валидация всех полей перед отправкой
     const validationErrors = {};
     if (travelCase?.form_template?.schema?.fields) {
-      const visibleFields = travelCase.form_template.schema.fields.filter((field) => 
+      const visibleFields = travelCase.form_template.schema.fields.filter((field) =>
         isFieldVisible(field)
       );
-      
+
       visibleFields.forEach((field) => {
+        if (field.type === "hint_block") {
+          return;
+        }
         const fieldId = field.name || field.id;
         const errors = validateField(field, formData[fieldId]);
         if (errors.length > 0) {
@@ -959,6 +974,9 @@ function PublicForm() {
     let hasErrors = false;
     
     stepFields.forEach((field) => {
+      if (field.type === "hint_block") {
+        return;
+      }
       const fieldId = field.name || field.id;
       if (isFieldVisible(field)) {
         const fieldErrors = validateField(field, formData[fieldId]);
@@ -1069,6 +1087,28 @@ function PublicForm() {
     }
     
     return visibleFields.map((field, index) => {
+        if (field.type === "hint_block") {
+          const hintId = field.id || field.name || `hint_${index}`;
+          return (
+            <div
+              key={hintId}
+              className="mb-6 rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3"
+              role="note"
+            >
+              {field.label && (
+                <div className="text-sm font-semibold text-blue-800">
+                  {field.label}
+                </div>
+              )}
+              {field.description && (
+                <div className="text-sm text-blue-700 whitespace-pre-line">
+                  {field.description}
+                </div>
+              )}
+            </div>
+          );
+        }
+
         const fieldId = field.name || field.id || `field_${index}`;
         const fieldValue = formData[fieldId] || "";
         const errors = fieldErrors[fieldId];
