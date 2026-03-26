@@ -20,9 +20,9 @@ class BitrixApiService
      *
      * @param string $method Например: crm.deal.get
      * @param array<string, mixed> $params
-     * @return array<string, mixed>|null
+     * @return mixed
      */
-    public function call(string $method, array $params = []): ?array
+    public function call(string $method, array $params = []): mixed
     {
         $suffix = $this->methodSuffix ?: '';
         $url = rtrim($this->webhookUrl, '/') . '/' . $method . $suffix;
@@ -215,6 +215,116 @@ class BitrixApiService
         ]);
 
         return is_numeric($result) ? (int) $result : null;
+    }
+
+    /**
+     * Добавить универсальное дело (todo) в таймлайн сделки.
+     *
+     * @param int $dealId ID сделки в Bitrix
+     * @param string $title Название дела
+     * @param string $description Описание дела
+     * @param int $responsibleId ID ответственного
+     * @param string $deadline Дедлайн в формате даты/времени
+     * @return int|null ID созданного дела или null при ошибке
+     */
+    public function addDealTimelineTodo(
+        int $dealId,
+        string $title,
+        string $description,
+        int $responsibleId,
+        string $deadline,
+        array $pingOffsets = [0]
+    ): ?int {
+        // Важно: у crm.activity.todo.add параметры передаются в корне запроса (НЕ в fields).
+        $result = $this->call('crm.activity.todo.add', [
+            'ownerTypeId' => 2, // 2 = deal
+            'ownerId' => $dealId,
+            'title' => $title,
+            'description' => $description,
+            'responsibleId' => $responsibleId,
+            'deadline' => $deadline,
+            'pingOffsets' => $pingOffsets,
+        ]);
+
+        if (is_numeric($result)) {
+            return (int) $result;
+        }
+        if (is_array($result) && isset($result['id']) && is_numeric($result['id'])) {
+            return (int) $result['id'];
+        }
+
+        // Fallback: часть порталов/вебхуков ожидает legacy-ключи (верхний регистр).
+        $legacyResult = $this->call('crm.activity.todo.add', [
+            'OWNER_TYPE_ID' => 2,
+            'OWNER_ID' => $dealId,
+            'TITLE' => $title,
+            'DESCRIPTION' => $description,
+            'RESPONSIBLE_ID' => $responsibleId,
+            'DEADLINE' => $deadline,
+            'PING_OFFSETS' => $pingOffsets,
+        ]);
+
+        if (is_numeric($legacyResult)) {
+            return (int) $legacyResult;
+        }
+        if (is_array($legacyResult) && isset($legacyResult['id']) && is_numeric($legacyResult['id'])) {
+            return (int) $legacyResult['id'];
+        }
+
+        return null;
+    }
+
+    /**
+     * Обновить сделку в Bitrix24.
+     *
+     * @param int $dealId ID сделки в Bitrix
+     * @param array<string, mixed> $fields Поля для обновления
+     * @return bool Успешность обновления
+     */
+    public function updateDeal(int $dealId, array $fields): bool
+    {
+        $result = $this->call('crm.deal.update', [
+            'id' => $dealId,
+            'fields' => $fields,
+        ]);
+
+        return $result === true;
+    }
+
+    /**
+     * Найти ID стадии сделки по названию.
+     *
+     * @param string $entityId Например: DEAL_STAGE или DEAL_STAGE_4
+     */
+    public function findDealStageIdByName(string $stageName, string $entityId = 'DEAL_STAGE'): ?string
+    {
+        $stageName = trim($stageName);
+        if ($stageName === '') {
+            return null;
+        }
+
+        $result = $this->call('crm.status.list', [
+            'filter' => [
+                'ENTITY_ID' => $entityId,
+            ],
+        ]);
+
+        if (!is_array($result)) {
+            return null;
+        }
+
+        foreach ($result as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $name = (string) ($item['NAME'] ?? '');
+            $statusId = $item['STATUS_ID'] ?? null;
+            if ($name !== '' && mb_strtolower($name) === mb_strtolower($stageName) && $statusId !== null && $statusId !== '') {
+                return (string) $statusId;
+            }
+        }
+
+        return null;
     }
 
     /**
