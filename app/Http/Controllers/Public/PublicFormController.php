@@ -11,6 +11,7 @@ use App\Services\Bitrix\BitrixApiService;
 use App\Services\Public\FormDraftService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -364,12 +365,62 @@ class PublicFormController extends Controller
         // Удаляем черновик после успешной отправки
         $this->formDraftService->deleteDraft($token);
 
-        // Отправляем комментарий в таймлайн сделки Bitrix и обновляем контакт, если заявка связана со сделкой
+        // Создаём дело в таймлайне сделки Bitrix и обновляем контакт, если заявка связана со сделкой
         if ($travelCase->bitrix_deal_id && config('bitrix.webhook_url')) {
             $payload = $request->input('payload', []);
             $dealId = (int) $travelCase->bitrix_deal_id;
-            $comment = $this->formatBitrixComment($travelCase, $payload, $formResponse);
-            $this->bitrixApi->addDealTimelineComment($dealId, $comment);
+            $description = $this->formatBitrixComment($travelCase, $payload, $formResponse, false);
+            $deal = $this->bitrixApi->getDeal($dealId);
+
+            $responsibleId = isset($deal['ASSIGNED_BY_ID']) ? (int) $deal['ASSIGNED_BY_ID'] : 0;
+            if ($responsibleId <= 0) {
+                $responsibleId = isset($deal['CREATED_BY_ID']) ? (int) $deal['CREATED_BY_ID'] : 0;
+            }
+            if ($responsibleId > 0) {
+                $todoId = $this->bitrixApi->addDealTimelineTodo(
+                    $dealId,
+                    'Форма сбора данных',
+                    $description,
+                    $responsibleId,
+                    now()->format('c'),
+                    [0]
+                );
+                if ($todoId === null) {
+                    Log::warning('Failed to create Bitrix todo after public form submit', [
+                        'deal_id' => $dealId,
+                        'responsible_id' => $responsibleId,
+                    ]);
+                }
+            }
+
+            // Переводим сделку на стадию "Клиент прислал документы" только из стадии "Консультация проведена".
+            $currentStageId = isset($deal['STAGE_ID']) ? (string) $deal['STAGE_ID'] : null;
+            $stageEntityId = 'DEAL_STAGE';
+            if ($currentStageId && preg_match('/^C(\d+):/i', $currentStageId, $matches) === 1) {
+                $stageEntityId = 'DEAL_STAGE_' . $matches[1];
+            }
+
+            $sourceStageId = $this->bitrixApi->findDealStageIdByName('Консультация проведена', $stageEntityId);
+            $targetStageId = $this->bitrixApi->findDealStageIdByName('Клиент прислал документы', $stageEntityId);
+
+            if ($sourceStageId === null || $targetStageId === null) {
+                // Fallback: часть порталов хранит стадии в DEAL_STAGE.
+                $sourceStageId = $sourceStageId ?? $this->bitrixApi->findDealStageIdByName('Консультация проведена');
+                $targetStageId = $targetStageId ?? $this->bitrixApi->findDealStageIdByName('Клиент прислал документы');
+            }
+
+            if ($currentStageId && $sourceStageId && $targetStageId && $currentStageId === $sourceStageId) {
+                $updated = $this->bitrixApi->updateDeal($dealId, [
+                    'STAGE_ID' => $targetStageId,
+                ]);
+                if (!$updated) {
+                    Log::warning('Failed to update Bitrix deal stage after public form submit', [
+                        'deal_id' => $dealId,
+                        'current_stage_id' => $currentStageId,
+                        'target_stage_id' => $targetStageId,
+                    ]);
+                }
+            }
 
             // Обновляем данные контакта в Bitrix данными из формы (заменяем текущие значения, а не добавляем)
             $contactIds = $this->bitrixApi->getDealContactIds($dealId);
@@ -402,10 +453,15 @@ class PublicFormController extends Controller
     }
 
     /**
-     * Форматировать данные формы для комментария в Bitrix: "Название поля — значение".
+     * Форматировать данные формы для описания в Bitrix: "Название поля — значение".
      * Для файловых полей добавляются ссылки на файлы.
      */
-    private function formatBitrixComment(TravelCase $travelCase, array $payload, ?FormResponse $formResponse = null): string
+    private function formatBitrixComment(
+        TravelCase $travelCase,
+        array $payload,
+        ?FormResponse $formResponse = null,
+        bool $includeHeader = true
+    ): string
     {
         $schema = $travelCase->formTemplate->schema ?? [];
         $fields = $schema['fields'] ?? [];
@@ -452,12 +508,13 @@ class PublicFormController extends Controller
         }
 
         $templateName = $travelCase->formTemplate->name ?? '—';
-        $lines = [
-            'Клиент отправил форму',
-            'Шаблон: ' . $templateName,
-            'Дата: ' . now()->format('d.m.Y H:i'),
-            '',
-        ];
+        $lines = [];
+        if ($includeHeader) {
+            $lines[] = 'Клиент отправил форму';
+        }
+        $lines[] = 'Шаблон: ' . $templateName;
+        $lines[] = 'Дата: ' . now()->format('d.m.Y H:i');
+        $lines[] = '';
 
         foreach ($payload as $fieldId => $value) {
             $meta = $fieldMeta[$fieldId] ?? null;
