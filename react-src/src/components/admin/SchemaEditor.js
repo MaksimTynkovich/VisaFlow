@@ -997,7 +997,7 @@ function FieldEditor({
         {localField.type !== "step_separator" && localField.type !== "hint_block" && bitrixDealFields.length > 0 && (
           <div ref={bitrixDealDropdownRef} className="relative">
             <label className="block text-sm font-medium text-blue-700 mb-1">
-              Поле Bitrix24 (сделка) — одно поле
+              Поле Bitrix24 (сделка)
             </label>
             <div className="relative">
               <input
