@@ -40,4 +40,30 @@ class BitrixController extends Controller
             'data' => $options,
         ]);
     }
+
+    /**
+     * Список полей сделки Bitrix24 для маппинга в форме (код поля + название).
+     * Кэшируется. ?refresh=1 — принудительно обновить из Bitrix.
+     */
+    public function dealFields(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $refresh = $request->boolean('refresh');
+        $fields = $this->bitrixApi->getDealFields($refresh);
+
+        return response()->json([
+            'data' => $fields,
+        ]);
+    }
+
+    /**
+     * Варианты выбора для поля сделки Bitrix (списки / пользовательские поля).
+     */
+    public function dealFieldOptions(string $fieldCode): JsonResponse
+    {
+        $options = $this->bitrixApi->getDealFieldOptions($fieldCode);
+
+        return response()->json([
+            'data' => $options,
+        ]);
+    }
 }

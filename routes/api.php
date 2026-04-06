@@ -43,4 +43,6 @@ Route::prefix('admin')
 
         Route::get('bitrix/contact-fields', [\App\Http\Controllers\Admin\BitrixController::class, 'contactFields']);
         Route::get('bitrix/contact-fields/{fieldCode}/options', [\App\Http\Controllers\Admin\BitrixController::class, 'contactFieldOptions']);
+        Route::get('bitrix/deal-fields', [\App\Http\Controllers\Admin\BitrixController::class, 'dealFields']);
+        Route::get('bitrix/deal-fields/{fieldCode}/options', [\App\Http\Controllers\Admin\BitrixController::class, 'dealFieldOptions']);
     });

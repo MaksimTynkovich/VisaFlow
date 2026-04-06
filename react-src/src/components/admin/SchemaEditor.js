@@ -46,12 +46,17 @@ function SchemaEditor({ schema, onChange }) {
   const [editingIndex, setEditingIndex] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [bitrixContactFields, setBitrixContactFields] = useState([]);
+  const [bitrixDealFields, setBitrixDealFields] = useState([]);
 
   const loadBitrixFields = (refresh = false) => {
-    const url = refresh ? "/api/admin/bitrix/contact-fields?refresh=1" : "/api/admin/bitrix/contact-fields";
-    apiRequest(url)
+    const q = refresh ? "?refresh=1" : "";
+    apiRequest(`/api/admin/bitrix/contact-fields${q}`)
       .then((res) => res.ok && res.json())
       .then((data) => data?.data && setBitrixContactFields(data.data))
+      .catch(() => {});
+    apiRequest(`/api/admin/bitrix/deal-fields${q}`)
+      .then((res) => res.ok && res.json())
+      .then((data) => data?.data && setBitrixDealFields(data.data))
       .catch(() => {});
   };
 
@@ -144,12 +149,14 @@ function SchemaEditor({ schema, onChange }) {
             onClick={() => loadBitrixFields(true)}
             className="px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors text-sm"
             title={
-              bitrixContactFields.length > 0
-                ? "Обновить список полей из Bitrix24 после добавления/удаления полей в контактах"
-                : "Загрузить список полей контакта из Bitrix24 (нужен настроенный webhook)"
+              bitrixContactFields.length > 0 || bitrixDealFields.length > 0
+                ? "Обновить списки полей контакта и сделки из Bitrix24"
+                : "Загрузить поля контакта и сделки из Bitrix24 (нужен webhook)"
             }
           >
-            {bitrixContactFields.length > 0 ? "Обновить поля Bitrix" : "Загрузить поля Bitrix"}
+            {bitrixContactFields.length > 0 || bitrixDealFields.length > 0
+              ? "Обновить поля Bitrix"
+              : "Загрузить поля Bitrix"}
           </button>
         </div>
       </div>
@@ -177,6 +184,7 @@ function SchemaEditor({ schema, onChange }) {
             }
             availableFields={getAvailableFields(index)}
             bitrixContactFields={bitrixContactFields}
+            bitrixDealFields={bitrixDealFields}
           />
         ))}
       </div>
@@ -398,12 +406,18 @@ function FieldEditor({
   onMoveDown,
   availableFields,
   bitrixContactFields = [],
+  bitrixDealFields = [],
 }) {
   const [localField, setLocalField] = useState(field);
   const [bitrixSearch, setBitrixSearch] = useState("");
   const [bitrixDropdownOpen, setBitrixDropdownOpen] = useState(false);
   const [bitrixOptionsLoading, setBitrixOptionsLoading] = useState(false);
   const bitrixDropdownRef = React.useRef(null);
+
+  const [bitrixDealSearch, setBitrixDealSearch] = useState("");
+  const [bitrixDealDropdownOpen, setBitrixDealDropdownOpen] = useState(false);
+  const [bitrixDealOptionsLoading, setBitrixDealOptionsLoading] = useState(false);
+  const bitrixDealDropdownRef = React.useRef(null);
 
   const loadBitrixFieldOptions = React.useCallback((fieldCode, applyOptions) => {
     if (!fieldCode) return;
@@ -416,6 +430,19 @@ function FieldEditor({
       })
       .catch(() => {})
       .finally(() => setBitrixOptionsLoading(false));
+  }, []);
+
+  const loadDealFieldOptions = React.useCallback((fieldCode, applyOptions) => {
+    if (!fieldCode) return;
+    setBitrixDealOptionsLoading(true);
+    apiRequest(`/api/admin/bitrix/deal-fields/${encodeURIComponent(fieldCode)}/options`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const options = Array.isArray(data?.data) ? data.data : [];
+        applyOptions(options);
+      })
+      .catch(() => {})
+      .finally(() => setBitrixDealOptionsLoading(false));
   }, []);
 
   React.useEffect(() => {
@@ -478,6 +505,62 @@ function FieldEditor({
     return { list: result, total: totalMatchCount };
   }, [bitrixContactFields, bitrixSearch, localField.bitrix_field]);
 
+  const filteredBitrixDealFields = React.useMemo(() => {
+    if (!bitrixDealFields || bitrixDealFields.length === 0) return { list: [], total: 0 };
+    const term = bitrixDealSearch.trim().toLowerCase().replace(/\s+/g, " ");
+    let list = bitrixDealFields;
+    if (term) {
+      const wordStartsWith = (text) => {
+        const t = String(text || "").toLowerCase();
+        if (t === term || t.startsWith(term)) return true;
+        const words = t.split(/\s+/);
+        return words.some((w) => w.startsWith(term) || term.startsWith(w));
+      };
+      list = bitrixDealFields.filter((bf) => {
+        const title = (bf.title || "").toLowerCase();
+        const code = (bf.code || "").toLowerCase();
+        return title === term || code === term
+          || title.startsWith(term) || code.startsWith(term)
+          || wordStartsWith(bf.title) || wordStartsWith(bf.code);
+      });
+    }
+    const getScore = (bf) => {
+      const title = String(bf.title || "").toLowerCase();
+      const code = String(bf.code || "").toLowerCase();
+      if (title === term || code === term) return 4;
+      if (title.startsWith(term) || code.startsWith(term)) return 3;
+      const titleWords = title.split(/\s+/);
+      const codeWords = code.split(/\s+/);
+      if (titleWords.some((w) => w.startsWith(term))) return 2;
+      if (codeWords.some((w) => w.startsWith(term))) return 2;
+      return 0;
+    };
+    let result = [...list].sort((a, b) => {
+      if (term) {
+        const sa = getScore(a);
+        const sb = getScore(b);
+        if (sa !== sb) return sb - sa;
+      }
+      const aIsUf = String(a.code || "").startsWith("UF_");
+      const bIsUf = String(b.code || "").startsWith("UF_");
+      if (aIsUf !== bIsUf) return aIsUf ? 1 : -1;
+      return String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "accent" });
+    });
+    if (term && result.length > 0) {
+      const bestScore = getScore(result[0]);
+      result = result.filter((bf) => getScore(bf) >= bestScore);
+    }
+    const selectedCode = localField.bitrix_deal_field;
+    if (selectedCode && !result.some((bf) => bf.code === selectedCode)) {
+      const selected = bitrixDealFields.find((bf) => bf.code === selectedCode);
+      if (selected) result = [selected, ...result];
+    }
+    const BITRIX_SEARCH_LIMIT = 10;
+    const totalMatchCount = result.length;
+    result = result.slice(0, BITRIX_SEARCH_LIMIT);
+    return { list: result, total: totalMatchCount };
+  }, [bitrixDealFields, bitrixDealSearch, localField.bitrix_deal_field]);
+
   React.useEffect(() => {
     if (!bitrixDropdownOpen) return;
     const handleClickOutside = (e) => {
@@ -489,6 +572,17 @@ function FieldEditor({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [bitrixDropdownOpen]);
 
+  React.useEffect(() => {
+    if (!bitrixDealDropdownOpen) return;
+    const handleClickOutside = (e) => {
+      if (bitrixDealDropdownRef.current && !bitrixDealDropdownRef.current.contains(e.target)) {
+        setBitrixDealDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [bitrixDealDropdownOpen]);
+
   const selectedBitrixField = localField.bitrix_field
     ? bitrixContactFields.find((bf) => bf.code === localField.bitrix_field)
     : null;
@@ -496,6 +590,15 @@ function FieldEditor({
     ? bitrixSearch
     : selectedBitrixField
     ? `${selectedBitrixField.title} (${selectedBitrixField.code})`
+    : "";
+
+  const selectedBitrixDealField = localField.bitrix_deal_field
+    ? bitrixDealFields.find((bf) => bf.code === localField.bitrix_deal_field)
+    : null;
+  const bitrixDealDisplayText = bitrixDealDropdownOpen
+    ? bitrixDealSearch
+    : selectedBitrixDealField
+    ? `${selectedBitrixDealField.title} (${selectedBitrixDealField.code})`
     : "";
 
   const handleSave = () => {
@@ -507,6 +610,7 @@ function FieldEditor({
       };
       delete finalField.options;
       delete finalField.bitrix_field;
+      delete finalField.bitrix_deal_field;
       delete finalField.bitrix_send_as_multiple;
       delete finalField.when;
       delete finalField.when_any;
@@ -519,6 +623,7 @@ function FieldEditor({
       };
       delete finalField.options;
       delete finalField.bitrix_field;
+      delete finalField.bitrix_deal_field;
       delete finalField.bitrix_send_as_multiple;
       delete finalField.file_multiple;
       delete finalField.accept;
@@ -635,7 +740,8 @@ function FieldEditor({
             Тип: {FIELD_TYPES.find((t) => t.value === field.type)?.label || field.type}
             {field.required && field.type !== "step_separator" && " • Обязательное"}
             {(field.when || (Array.isArray(field.when_any) && field.when_any.length > 0)) && " • Условное"}
-            {field.bitrix_field && ` • Bitrix: ${field.bitrix_field}`}
+            {field.bitrix_field && ` • Bitrix (контакт): ${field.bitrix_field}`}
+            {field.bitrix_deal_field && ` • Bitrix (сделка): ${field.bitrix_deal_field}`}
             {field.bitrix_send_as_multiple && field.type === "select" && " • В Bitrix передаётся два значения"}
           </div>
         </div>
@@ -716,10 +822,17 @@ function FieldEditor({
                 } else {
                   setLocalField({ ...localField, type: newType });
                 }
-                if (newType === "select" && localField.bitrix_field) {
-                  loadBitrixFieldOptions(localField.bitrix_field, (options) =>
-                    setLocalField((prev) => ({ ...prev, type: "select", options }))
-                  );
+                if (newType === "select") {
+                  if (localField.bitrix_field) {
+                    loadBitrixFieldOptions(localField.bitrix_field, (options) =>
+                      setLocalField((prev) => ({ ...prev, type: "select", options }))
+                    );
+                  }
+                  if (localField.bitrix_deal_field) {
+                    loadDealFieldOptions(localField.bitrix_deal_field, (options) =>
+                      setLocalField((prev) => ({ ...prev, type: "select", options }))
+                    );
+                  }
                 }
               }}
               className="w-full py-2 px-3 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
@@ -803,7 +916,7 @@ function FieldEditor({
         {localField.type !== "step_separator" && localField.type !== "hint_block" && bitrixContactFields.length > 0 && (
           <div ref={bitrixDropdownRef} className="relative">
             <label className="block text-sm font-medium text-blue-700 mb-1">
-              Поле Bitrix24 (контакт) — одно поле
+              Поле Bitrix24 (контакт)
             </label>
             <div className="relative">
               <input
@@ -881,12 +994,96 @@ function FieldEditor({
           </div>
         )}
 
+        {localField.type !== "step_separator" && localField.type !== "hint_block" && bitrixDealFields.length > 0 && (
+          <div ref={bitrixDealDropdownRef} className="relative">
+            <label className="block text-sm font-medium text-blue-700 mb-1">
+              Поле Bitrix24 (сделка) — одно поле
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={bitrixDealDisplayText}
+                onChange={(e) => {
+                  setBitrixDealSearch(e.target.value);
+                  setBitrixDealDropdownOpen(true);
+                }}
+                onFocus={() => {
+                  setBitrixDealDropdownOpen(true);
+                  if (!bitrixDealDropdownOpen) setBitrixDealSearch("");
+                }}
+                placeholder="Поиск по названию или коду поля сделки..."
+                className="w-full py-2 pl-3 pr-8 border border-blue-200 rounded-md bg-blue-50 text-blue-700 focus:ring-2 focus:ring-blue-200 outline-none"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-blue-400">
+                {bitrixDealDropdownOpen ? "▲" : "▼"}
+              </span>
+            </div>
+            {bitrixDealDropdownOpen && (
+              <ul className="absolute z-20 mt-1 w-full max-h-56 overflow-auto border border-blue-200 rounded-md bg-white shadow-lg py-1">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLocalField({ ...localField, bitrix_deal_field: undefined });
+                      setBitrixDealSearch("");
+                      setBitrixDealDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50"
+                  >
+                    — не сопоставлять —
+                  </button>
+                </li>
+                {filteredBitrixDealFields.list.map((bf) => (
+                  <li key={bf.code}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLocalField({ ...localField, bitrix_deal_field: bf.code });
+                        setBitrixDealSearch("");
+                        setBitrixDealDropdownOpen(false);
+                        if (localField.type === "select") {
+                          loadDealFieldOptions(bf.code, (options) =>
+                            setLocalField((prev) => ({ ...prev, bitrix_deal_field: bf.code, options }))
+                          );
+                        }
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm truncate ${
+                        localField.bitrix_deal_field === bf.code
+                          ? "bg-blue-100 text-blue-800 font-medium"
+                          : "text-blue-700 hover:bg-blue-50"
+                      }`}
+                      title={`${bf.title} (${bf.code})`}
+                    >
+                      {bf.title} ({bf.code})
+                    </button>
+                  </li>
+                ))}
+                {filteredBitrixDealFields.list.length === 0 && (
+                  <li className="px-3 py-2 text-sm text-blue-400">Ничего не найдено</li>
+                )}
+                {filteredBitrixDealFields.total > 10 && (
+                  <li className="px-3 py-1.5 text-xs text-blue-400 border-t border-blue-100">
+                    Показано не более 10 из {filteredBitrixDealFields.total}
+                    {bitrixDealSearch.trim() ? ", уточните поиск" : ""}
+                  </li>
+                )}
+              </ul>
+            )}
+            <p className="text-xs text-blue-400 mt-1">
+              Синхронизация со сделкой при создании формы из сделки и при отправке (crm.deal.update). Независимо от поля контакта.
+            </p>
+          </div>
+        )}
+
         {localField.type === "select" && (
           <div>
-            {bitrixOptionsLoading && (
+            {(bitrixOptionsLoading || bitrixDealOptionsLoading) && (
               <p className="text-sm text-blue-500 mb-2">Загрузка вариантов из Bitrix24…</p>
             )}
-            {localField.bitrix_field && !bitrixOptionsLoading && (localField.options?.length > 0) && (
+            {(localField.bitrix_field || localField.bitrix_deal_field) &&
+              !bitrixOptionsLoading &&
+              !bitrixDealOptionsLoading &&
+              (localField.options?.length > 0) && (
               <p className="text-xs text-blue-400 mb-2">
                 Варианты загружены из Bitrix24. Можно отредактировать вручную.
               </p>
@@ -894,7 +1091,10 @@ function FieldEditor({
             <SelectOptionsEditor
               options={localField.options || []}
               onChange={(options) => setLocalField({ ...localField, options })}
-              showBitrixSecondValue={!!localField.bitrix_send_as_multiple && !!localField.bitrix_field}
+              showBitrixSecondValue={
+                !!localField.bitrix_send_as_multiple &&
+                (!!localField.bitrix_field || !!localField.bitrix_deal_field)
+              }
             />
 
             {/* Значение по умолчанию для select */}
@@ -937,7 +1137,7 @@ function FieldEditor({
               </div>
             )}
 
-            {localField.bitrix_field && (
+            {(localField.bitrix_field || localField.bitrix_deal_field) && (
               <label className="mt-4 flex items-center gap-2">
                 <input
                   type="checkbox"

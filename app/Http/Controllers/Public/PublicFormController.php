@@ -409,15 +409,18 @@ class PublicFormController extends Controller
                 $targetStageId = $targetStageId ?? $this->bitrixApi->findDealStageIdByName('Клиент прислал документы');
             }
 
+            $dealUpdates = $this->payloadToBitrixDealFields($travelCase, $payload, $deal, $formResponse);
+
             if ($currentStageId && $sourceStageId && $targetStageId && $currentStageId === $sourceStageId) {
-                $updated = $this->bitrixApi->updateDeal($dealId, [
-                    'STAGE_ID' => $targetStageId,
-                ]);
+                $dealUpdates['STAGE_ID'] = $targetStageId;
+            }
+
+            if (!empty($dealUpdates)) {
+                $updated = $this->bitrixApi->updateDeal($dealId, $dealUpdates);
                 if (!$updated) {
-                    Log::warning('Failed to update Bitrix deal stage after public form submit', [
+                    Log::warning('Failed to update Bitrix deal after public form submit', [
                         'deal_id' => $dealId,
-                        'current_stage_id' => $currentStageId,
-                        'target_stage_id' => $targetStageId,
+                        'fields_keys' => array_keys($dealUpdates),
                     ]);
                 }
             }
@@ -681,6 +684,74 @@ class PublicFormController extends Controller
     }
 
     /**
+     * Преобразовать данные формы в поля сделки Bitrix24 для crm.deal.update.
+     *
+     * @param array<string, mixed> $existingDeal Данные сделки из crm.deal.get
+     * @return array<string, mixed>
+     */
+    private function payloadToBitrixDealFields(
+        TravelCase $travelCase,
+        array $payload,
+        ?array $existingDeal = null,
+        ?FormResponse $formResponse = null
+    ): array {
+        $schema = $travelCase->formTemplate->schema ?? [];
+        $fields = $schema['fields'] ?? [];
+        $mapping = config('bitrix.deal_field_mapping', []);
+        $bitrixFields = [];
+
+        foreach ($fields as $field) {
+            $fieldId = $field['name'] ?? $field['id'] ?? null;
+            if (!$fieldId || !array_key_exists($fieldId, $payload)) {
+                continue;
+            }
+
+            $fieldType = $field['type'] ?? null;
+            $bitrixField = $field['bitrix_deal_field'] ?? $mapping[$fieldId] ?? $this->guessBitrixDealFieldFromFormId($fieldId);
+            if (!$bitrixField) {
+                continue;
+            }
+
+            if ($fieldType === 'file') {
+                $allowMultiple = !empty($field['file_multiple']);
+                $fileFieldValue = $this->buildBitrixMappedFileFieldValue($formResponse, (string) $fieldId, $allowMultiple);
+                if ($fileFieldValue !== null) {
+                    $bitrixFields[$bitrixField] = $fileFieldValue;
+                }
+                continue;
+            }
+
+            $value = $payload[$fieldId];
+            if (is_array($value) || $value === null || $value === '') {
+                continue;
+            }
+            $value = trim((string) $value);
+            if ($value === '') {
+                continue;
+            }
+
+            if ($bitrixField === 'PHONE' || $bitrixField === 'EMAIL') {
+                $bitrixFields[$bitrixField] = $this->buildMultifieldUpdate(
+                    $bitrixField,
+                    $value,
+                    $existingDeal[$bitrixField] ?? null
+                );
+            } elseif (!empty($field['bitrix_send_as_multiple']) && ($field['type'] ?? '') === 'select') {
+                $second = $this->resolveBitrixSecondValueForOption($value, $field);
+                if ((string) $second === (string) $value) {
+                    $bitrixFields[$bitrixField] = $value;
+                } else {
+                    $bitrixFields[$bitrixField] = $this->formatBitrixMultipleListValue([$value, $second]);
+                }
+            } else {
+                $bitrixFields[$bitrixField] = $value;
+            }
+        }
+
+        return $bitrixFields;
+    }
+
+    /**
      * Есть ли в шаблоне файловые поля с явным маппингом в Bitrix.
      */
     private function hasMappedBitrixFileField(TravelCase $travelCase): bool
@@ -690,7 +761,11 @@ class PublicFormController extends Controller
         foreach ($fields as $field) {
             $type = $field['type'] ?? null;
             $bitrixField = $field['bitrix_field'] ?? null;
+            $bitrixDealField = $field['bitrix_deal_field'] ?? null;
             if ($type === 'file' && is_string($bitrixField) && trim($bitrixField) !== '') {
+                return true;
+            }
+            if ($type === 'file' && is_string($bitrixDealField) && trim($bitrixDealField) !== '') {
                 return true;
             }
         }
@@ -855,6 +930,24 @@ class PublicFormController extends Controller
             'name' => 'NAME',
             'surname' => 'LAST_NAME',
             'telephone' => 'PHONE',
+        ];
+
+        return $map[$normalized] ?? null;
+    }
+
+    private function guessBitrixDealFieldFromFormId(string $fieldId): ?string
+    {
+        $normalized = strtolower(str_replace(['-', ' ', '_'], '_', $fieldId));
+        $map = [
+            'deal_title' => 'TITLE',
+            'title' => 'TITLE',
+            'opportunity' => 'OPPORTUNITY',
+            'amount' => 'OPPORTUNITY',
+            'sum' => 'OPPORTUNITY',
+            'deal_comments' => 'COMMENTS',
+            'probability' => 'PROBABILITY',
+            'phone' => 'PHONE',
+            'email' => 'EMAIL',
         ];
 
         return $map[$normalized] ?? null;

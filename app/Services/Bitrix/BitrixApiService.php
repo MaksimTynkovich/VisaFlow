@@ -431,6 +431,91 @@ class BitrixApiService
     }
 
     /**
+     * Список полей сделки Bitrix24 для маппинга (код + название).
+     *
+     * @return array<int, array{code: string, title: string}>
+     */
+    public function getDealFields(bool $refresh = false): array
+    {
+        if (empty($this->webhookUrl)) {
+            return [];
+        }
+
+        $cacheKey = 'bitrix.deal_fields';
+        $ttl = (int) config('bitrix.contact_fields_cache_ttl', 3600);
+
+        if ($refresh) {
+            Cache::forget($cacheKey);
+        }
+
+        return Cache::remember($cacheKey, $ttl, function () {
+            $list = [];
+
+            $standard = $this->call('crm.deal.fields');
+            if (is_array($standard)) {
+                foreach ($standard as $code => $meta) {
+                    if (!is_string($code) || str_starts_with($code, '=')) {
+                        continue;
+                    }
+                    $titleRaw = is_array($meta) ? ($meta['title'] ?? $meta['listLabel'] ?? $meta['listColumnLabel'] ?? null) : null;
+                    $list[] = ['code' => $code, 'title' => $this->extractUserFieldTitle($titleRaw, $code)];
+                }
+            }
+
+            $userFields = $this->call('crm.deal.userfield.list');
+            if (is_array($userFields)) {
+                foreach ($userFields as $key => $uf) {
+                    $code = null;
+                    $titleRaw = null;
+                    if (is_array($uf)) {
+                        $code = $uf['FIELD_NAME'] ?? $uf['fieldName'] ?? $uf['FIELD_ID'] ?? (is_string($key) && str_starts_with((string) $key, 'UF_') ? $key : null);
+                        $titleRaw = $uf['LIST_COLUMN_LABEL'] ?? $uf['EDIT_FORM_LABEL'] ?? $uf['LIST_FILTER_LABEL']
+                            ?? $uf['listColumnLabel'] ?? $uf['editFormLabel'] ?? $uf['listFilterLabel']
+                            ?? $uf['TITLE'] ?? $uf['title'] ?? $uf['label'] ?? $uf['LABEL'] ?? null;
+                    }
+                    if ($code === null || $code === '') {
+                        if (is_string($key) && str_starts_with($key, 'UF_')) {
+                            $code = $key;
+                        } else {
+                            continue;
+                        }
+                    }
+                    $title = $this->extractUserFieldTitle($titleRaw, (string) $code);
+                    $list[] = ['code' => (string) $code, 'title' => $title];
+                }
+            }
+
+            usort($list, fn ($a, $b) => strcasecmp($a['title'], $b['title']));
+
+            return array_values($list);
+        });
+    }
+
+    /**
+     * Варианты выбора для поля сделки Bitrix (список / enumeration).
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    public function getDealFieldOptions(string $fieldCode): array
+    {
+        if (empty($this->webhookUrl) || $fieldCode === '') {
+            return [];
+        }
+
+        $cacheKey = 'bitrix.deal_field_options.' . $fieldCode;
+        $ttl = (int) config('bitrix.contact_fields_cache_ttl', 3600);
+
+        return Cache::remember($cacheKey, $ttl, function () use ($fieldCode) {
+            $options = $this->fetchDealStandardFieldItems($fieldCode);
+            if ($options !== []) {
+                return $options;
+            }
+
+            return $this->fetchDealUserFieldListValues($fieldCode);
+        });
+    }
+
+    /**
      * Варианты из стандартного поля контакта (crm.contact.fields), если у поля есть items.
      *
      * @return array<int, array{value: string, label: string}>
@@ -494,6 +579,71 @@ class BitrixApiService
                 return $this->normalizeEnumListToOptions($enumList);
             }
         }
+        return [];
+    }
+
+    /**
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function fetchDealStandardFieldItems(string $fieldCode): array
+    {
+        $standard = $this->call('crm.deal.fields');
+        if (!is_array($standard) || !isset($standard[$fieldCode]) || !is_array($standard[$fieldCode])) {
+            return [];
+        }
+        $meta = $standard[$fieldCode];
+        $items = $meta['items'] ?? null;
+        if (!is_array($items)) {
+            return [];
+        }
+
+        return $this->normalizeItemsToOptions($items);
+    }
+
+    /**
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function fetchDealUserFieldListValues(string $fieldCode): array
+    {
+        $userFields = $this->call('crm.deal.userfield.list');
+        if (!is_array($userFields)) {
+            return [];
+        }
+        $userField = null;
+        foreach ($userFields as $uf) {
+            if (!is_array($uf)) {
+                continue;
+            }
+            $code = $uf['FIELD_NAME'] ?? $uf['fieldName'] ?? $uf['FIELD_ID'] ?? null;
+            if ($code === $fieldCode) {
+                $userField = $uf;
+                break;
+            }
+        }
+        if ($userField === null) {
+            return [];
+        }
+        $type = $userField['USER_TYPE_ID'] ?? $userField['userTypeId'] ?? '';
+        if ($type === 'iblock_element') {
+            return $this->fetchIblockElementValues($userField);
+        }
+        if ($type !== 'enumeration' && $type !== 'list') {
+            return [];
+        }
+        $list = $userField['LIST'] ?? $userField['list'] ?? null;
+        if (is_array($list)) {
+            return $this->normalizeItemsToOptions($list);
+        }
+        $id = $userField['ID'] ?? $userField['id'] ?? null;
+        if ($id !== null) {
+            $enumList = $this->call('crm.userfield.enumeration.list', [
+                'filter' => ['USER_FIELD_ID' => $id],
+            ]);
+            if (is_array($enumList)) {
+                return $this->normalizeEnumListToOptions($enumList);
+            }
+        }
+
         return [];
     }
 

@@ -85,7 +85,10 @@ class BitrixFormFromDealService
             return null;
         }
 
-        $prefilledData = $this->mapContactToFormSchema($contact, $formTemplate->schema);
+        $prefilledData = array_merge(
+            $this->mapDealToFormSchema($deal, $formTemplate->schema),
+            $this->mapContactToFormSchema($contact, $formTemplate->schema)
+        );
         $createdBy = $this->resolveCreatedByUserId();
         $productSnapshot = $firstProduct ? [
             'id' => $firstProduct['id'],
@@ -219,6 +222,69 @@ class BitrixFormFromDealService
     }
 
     /**
+     * Маппинг данных сделки Bitrix в поля формы по schema.
+     *
+     * @param array<string, mixed> $deal
+     * @param array<string, mixed>|null $schema
+     * @return array<string, mixed>
+     */
+    private function mapDealToFormSchema(array $deal, ?array $schema): array
+    {
+        $result = [];
+        $fields = $schema['fields'] ?? [];
+
+        if (!is_array($fields)) {
+            return $result;
+        }
+
+        $mapping = config('bitrix.deal_field_mapping', []);
+
+        foreach ($fields as $field) {
+            $fieldId = $field['name'] ?? $field['id'] ?? null;
+            if (!$fieldId || ($field['type'] ?? '') === 'file') {
+                continue;
+            }
+
+            $bitrixDealField = $field['bitrix_deal_field'] ?? $mapping[$fieldId] ?? $this->guessBitrixDealField($fieldId);
+
+            if (!$bitrixDealField) {
+                continue;
+            }
+
+            $value = $this->extractDealValue($deal, $bitrixDealField);
+            if ($value !== null && $value !== '') {
+                $result[$fieldId] = $value;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Извлечь значение из сделки Bitrix по имени поля.
+     */
+    private function extractDealValue(array $deal, string $bitrixField): mixed
+    {
+        $value = $deal[$bitrixField] ?? null;
+
+        if ($value === null) {
+            return null;
+        }
+
+        if ($bitrixField === 'PHONE' && is_array($value)) {
+            $first = $value[0] ?? null;
+            return is_array($first) ? ($first['VALUE'] ?? null) : null;
+        }
+
+        if ($bitrixField === 'EMAIL' && is_array($value)) {
+            $first = $value[0] ?? null;
+            return is_array($first) ? ($first['VALUE'] ?? null) : null;
+        }
+
+        return is_scalar($value) ? (string) $value : null;
+    }
+
+    /**
      * Извлечь значение из контакта Bitrix по имени поля.
      */
     private function extractContactValue(array $contact, string $bitrixField): mixed
@@ -263,6 +329,25 @@ class BitrixFormFromDealService
             'address_country' => 'ADDRESS_COUNTRY',
             'birthdate' => 'BIRTHDATE',
             'birth_date' => 'BIRTHDATE',
+        ];
+
+        return $map[$normalized] ?? null;
+    }
+
+    private function guessBitrixDealField(string $fieldId): ?string
+    {
+        $normalized = strtolower(str_replace(['-', ' ', '_'], '_', $fieldId));
+
+        $map = [
+            'deal_title' => 'TITLE',
+            'title' => 'TITLE',
+            'opportunity' => 'OPPORTUNITY',
+            'amount' => 'OPPORTUNITY',
+            'sum' => 'OPPORTUNITY',
+            'deal_comments' => 'COMMENTS',
+            'probability' => 'PROBABILITY',
+            'phone' => 'PHONE',
+            'email' => 'EMAIL',
         ];
 
         return $map[$normalized] ?? null;
