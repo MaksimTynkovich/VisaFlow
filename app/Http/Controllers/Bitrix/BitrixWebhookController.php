@@ -4,13 +4,18 @@ namespace App\Http\Controllers\Bitrix;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Bitrix\CreateFormFromDealRequest;
+use App\Http\Requests\Bitrix\CreateSpainVisaPdfRequest;
 use App\Services\Bitrix\BitrixFormFromDealService;
+use App\Services\Bitrix\BitrixSpainVisaPdfService;
 use Illuminate\Http\JsonResponse;
+use RuntimeException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BitrixWebhookController extends Controller
 {
     public function __construct(
-        private readonly BitrixFormFromDealService $bitrixFormService
+        private readonly BitrixFormFromDealService $bitrixFormService,
+        private readonly BitrixSpainVisaPdfService $bitrixSpainVisaPdfService
     ) {
     }
 
@@ -51,5 +56,28 @@ class BitrixWebhookController extends Controller
                 'bitrix_deal_id' => $result['travel_case']->bitrix_deal_id,
             ],
         ], 201);
+    }
+
+    /**
+     * Сгенерировать заполненную PDF-анкету Испании и сразу отдать на скачивание.
+     */
+    public function createSpainVisaPdf(CreateSpainVisaPdfRequest $request): BinaryFileResponse|JsonResponse
+    {
+        try {
+            $result = $this->bitrixSpainVisaPdfService->generateFromDeal((int) $request->input('deal_id'));
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'error' => [
+                    'message' => $e->getMessage(),
+                    'code' => 500,
+                ],
+            ], 500);
+        }
+
+        return response()
+            ->download($result['output_path'], $result['filename'], [
+                'Content-Type' => 'application/pdf',
+            ])
+            ->deleteFileAfterSend(true);
     }
 }

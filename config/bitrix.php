@@ -158,4 +158,15 @@ return [
     */
     'form_base_url' => env('BITRIX_FORM_BASE_URL'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Шаблон PDF-анкеты Испании
+    |--------------------------------------------------------------------------
+    |
+    | Абсолютный путь к PDF с AcroForm-полями.
+    | Файл используется при вызове /api/bitrix/create-spain-visa-pdf.
+    |
+    */
+    'spain_visa_template_path' => env('BITRIX_SPAIN_VISA_TEMPLATE_PATH', '/spain-visa-template.pdf'),
+
 ];

@@ -82,6 +82,22 @@ GET  /api/bitrix/create-form-from-deal?deal_id=123
 
 Продукт из сделки сохраняется в заявке (`bitrix_product_snapshot`) и доступен в API заявок (GET `/api/admin/travel-cases/{id}`) и в админке.
 
+**Скачать PDF-анкету Испании из сделки**
+
+```
+POST /api/bitrix/create-spain-visa-pdf
+GET  /api/bitrix/create-spain-visa-pdf?deal_id=123
+```
+
+Тело POST (JSON):
+```json
+{
+  "deal_id": 123
+}
+```
+
+Ответ: бинарный PDF-файл, поля остаются редактируемыми.
+
 ### Маппинг полей Bitrix → форма
 
 | Поле формы (name/id) | Bitrix Contact |
