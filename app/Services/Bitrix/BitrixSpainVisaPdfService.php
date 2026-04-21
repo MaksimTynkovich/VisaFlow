@@ -11,6 +11,52 @@ use Symfony\Component\Process\Process;
 
 class BitrixSpainVisaPdfService
 {
+    /**
+     * Значения enum из Bitrix поля "Паспорт. Гражданство сейчас" (UF_CRM_1476883419).
+     *
+     * @var array<string, string>
+     */
+    private const CURRENT_NATIONALITY_ENUM = [
+        '292' => 'BELARUS',
+        '294' => 'RUSSIA',
+        '296' => 'UKRAINE',
+        '520' => 'LITHUANIA',
+        '526' => 'KAZAKHSTAN',
+        '528' => 'UZBEKISTAN',
+        '580' => 'GEORGIA',
+        '582' => 'AZERBAIJAN',
+        '584' => 'ARMENIA',
+        '586' => 'USSR',
+        '588' => 'CHINA',
+        '590' => 'MOLDOVA',
+        '592' => 'TAJIKISTAN',
+        '594' => 'TURKMENISTAN',
+        '596' => 'OTHER',
+    ];
+
+    /**
+     * Значения enum из Bitrix поля "Паспорт. Страна рождения" (UF_CRM_1476265403).
+     *
+     * @var array<string, string>
+     */
+    private const BIRTH_COUNTRY_ENUM = [
+        '268' => 'BELARUS',
+        '270' => 'RUSSIA',
+        '272' => 'UKRAINE',
+        '472' => 'LITHUANIA',
+        '478' => 'KAZAKHSTAN',
+        '480' => 'UZBEKISTAN',
+        '548' => 'GEORGIA',
+        '550' => 'AZERBAIJAN',
+        '552' => 'ARMENIA',
+        '554' => 'USSR',
+        '556' => 'CHINA',
+        '558' => 'MOLDOVA',
+        '560' => 'TAJIKISTAN',
+        '562' => 'TURKMENISTAN',
+        '534' => 'OTHER',
+    ];
+
     public function __construct(
         private readonly BitrixApiService $bitrixApi
     ) {
@@ -92,10 +138,16 @@ class BitrixSpainVisaPdfService
         $firstName = $this->toIcao($this->firstNonEmpty($contact, ['NAME', 'UF_CRM_NAME_LAT']));
         $birthDate = $this->toDate($this->firstNonEmpty($contact, ['BIRTHDATE']));
         $birthPlace = $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_BIRTH_PLACE', 'ADDRESS_CITY']));
-        $birthCountry = $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_BIRTH_COUNTRY', 'ADDRESS_COUNTRY']));
-        $nationality = $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_NATIONALITY', 'ADDRESS_COUNTRY']));
+        $birthCountry = $this->resolveBirthCountry($contact);
+        $nationality = $this->resolveCurrentNationality($contact);
 
-        $passportNo = $this->toUpper($this->firstNonEmpty($contact, ['UF_CRM_PASSPORT_NO']));
+        $passportNo = $this->toUpper($this->firstNonEmpty($contact, [
+            'UF_CRM_PASSPORT_NO',
+            'UF_CRM_1470546337',
+            'UF_CRM_1470546300',
+        ]));
+        $nationalIdentityNo = $this->toUpper($this->firstNonEmpty($contact, ['UF_CRM_1470546300']));
+        $nationalIdentityField = trim((string) config('bitrix.spain_visa_national_identity_field', 'Text36'));
         $passportIssueDate = $this->toDate($this->firstNonEmpty($contact, ['UF_CRM_PASSPORT_ISSUE_DATE']));
         $passportExpiryDate = $this->toDate($this->firstNonEmpty($contact, ['UF_CRM_PASSPORT_EXPIRY_DATE']));
         $passportIssuedByCountry = $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_PASSPORT_ISSUED_BY_COUNTRY', 'ADDRESS_COUNTRY']));
@@ -122,8 +174,12 @@ class BitrixSpainVisaPdfService
 
         $entryDate = $this->toDate($this->firstNonEmpty($deal, ['UF_CRM_VISA_ENTRY_DATE', 'BEGINDATE']));
         $exitDate = $this->toDate($this->firstNonEmpty($deal, ['UF_CRM_VISA_EXIT_DATE', 'CLOSEDATE']));
+        $genderRaw = $this->firstNonEmpty($contact, ['UF_CRM_GENDER', 'UF_CRM_SEX', 'UF_CRM_1470563687', 'GENDER', 'SEX']);
+        $genderCheckboxes = $this->resolveGenderCheckboxValues($genderRaw);
+        $maritalStatusRaw = $this->firstNonEmpty($contact, ['UF_CRM_1470544847', 'UF_CRM_MARITAL_STATUS', 'MARITAL_STATUS']);
+        $maritalStatusCheckboxes = $this->resolveMaritalStatusCheckboxValues($maritalStatusRaw);
 
-        return [
+        $baseFields = [
             'Text2' => $lastName,
             'Text3' => $lastName,
             'Text4' => $firstName,
@@ -144,6 +200,12 @@ class BitrixSpainVisaPdfService
             'Text75' => $entryDate,
             'Text76' => $exitDate,
         ];
+
+        if ($nationalIdentityField !== '') {
+            $baseFields[$nationalIdentityField] = $nationalIdentityNo;
+        }
+
+        return array_merge($baseFields, $genderCheckboxes, $maritalStatusCheckboxes);
     }
 
     /**
@@ -237,6 +299,143 @@ class BitrixSpainVisaPdfService
         }
 
         return implode(', ', $clean);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function resolveGenderCheckboxValues(string $rawValue): array
+    {
+        /** @var array{male?: string, female?: string, other?: string} $fieldMap */
+        $fieldMap = (array) config('bitrix.spain_visa_gender_checkbox_fields', []);
+
+        $maleField = trim((string) ($fieldMap['male'] ?? ''));
+        $femaleField = trim((string) ($fieldMap['female'] ?? ''));
+        $otherField = trim((string) ($fieldMap['other'] ?? ''));
+
+        $result = [];
+        foreach ([$maleField, $femaleField, $otherField] as $fieldName) {
+            if ($fieldName !== '') {
+                $result[$fieldName] = '/Off';
+            }
+        }
+
+        $normalized = $this->normalizeGenderValue($rawValue);
+        if ($normalized === null) {
+            return $result;
+        }
+
+        $selectedField = match ($normalized) {
+            'male' => $maleField,
+            'female' => $femaleField,
+            default => $otherField,
+        };
+
+        if ($selectedField !== '') {
+            $result[$selectedField] = '/0';
+        }
+
+        return $result;
+    }
+
+    private function normalizeGenderValue(string $value): ?string
+    {
+        $value = mb_strtolower(trim($value));
+        if ($value === '') {
+            return null;
+        }
+
+        return match ($value) {
+            'm', 'male', 'man', '1', '158', 'male sex', 'м', 'муж', 'мужской', 'мужчина' => 'male',
+            'f', 'female', 'woman', '2', '160', 'female sex', 'ж', 'жен', 'женский', 'женщина' => 'female',
+            'other', 'x', '3', 'иной', 'другое', 'не указан', 'не указано' => 'other',
+            default => null,
+        };
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function resolveMaritalStatusCheckboxValues(string $rawValue): array
+    {
+        /** @var array{single?: string, married?: string, divorced?: string, widowed?: string} $fieldMap */
+        $fieldMap = (array) config('bitrix.spain_visa_marital_status_checkbox_fields', []);
+
+        $singleField = trim((string) ($fieldMap['single'] ?? ''));
+        $marriedField = trim((string) ($fieldMap['married'] ?? ''));
+        $divorcedField = trim((string) ($fieldMap['divorced'] ?? ''));
+        $widowedField = trim((string) ($fieldMap['widowed'] ?? ''));
+
+        $result = [];
+        foreach ([$singleField, $marriedField, $divorcedField, $widowedField] as $fieldName) {
+            if ($fieldName !== '') {
+                $result[$fieldName] = '/Off';
+            }
+        }
+
+        $normalized = $this->normalizeMaritalStatusValue($rawValue);
+        if ($normalized === null) {
+            return $result;
+        }
+
+        $selectedField = match ($normalized) {
+            'single' => $singleField,
+            'married' => $marriedField,
+            'divorced' => $divorcedField,
+            default => $widowedField,
+        };
+
+        if ($selectedField !== '') {
+            $result[$selectedField] = '/0';
+        }
+
+        return $result;
+    }
+
+    private function normalizeMaritalStatusValue(string $value): ?string
+    {
+        $value = mb_strtolower(trim($value));
+        if ($value === '') {
+            return null;
+        }
+
+        return match ($value) {
+            '86', 'single', 'single/unmarried', 'single_not_married', 'холост', 'не замужем', 'холост/не замужем' => 'single',
+            '88', 'married', 'женат', 'замужем', 'женат/замужем' => 'married',
+            '92', 'divorced', 'разведен', 'разведена', 'разведен/-а' => 'divorced',
+            '94', 'widow', 'widowed', 'вдовец', 'вдова', 'вдовец/вдова' => 'widowed',
+            default => null,
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $contact
+     */
+    private function resolveCurrentNationality(array $contact): string
+    {
+        $raw = $this->firstNonEmpty($contact, ['UF_CRM_1476883419', 'UF_CRM_NATIONALITY', 'ADDRESS_COUNTRY']);
+        if ($raw === '') {
+            return '';
+        }
+
+        $mapped = self::CURRENT_NATIONALITY_ENUM[$raw] ?? $raw;
+
+        return $this->toIcao($mapped);
+    }
+
+    /**
+     * @param array<string, mixed> $contact
+     */
+    private function resolveBirthCountry(array $contact): string
+    {
+        $raw = $this->firstNonEmpty($contact, ['UF_CRM_1476265403', 'UF_CRM_BIRTH_COUNTRY', 'ADDRESS_COUNTRY']);
+        if ($raw === '') {
+            return '';
+        }
+
+        $mapped = self::BIRTH_COUNTRY_ENUM[$raw] ?? $raw;
+
+        return $this->toIcao($mapped);
     }
 
 }

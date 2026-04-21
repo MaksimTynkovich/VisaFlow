@@ -98,6 +98,19 @@ GET  /api/bitrix/create-spain-visa-pdf?deal_id=123
 
 Ответ: бинарный PDF-файл, поля остаются редактируемыми.
 
+Для чекбоксов пола в PDF можно переопределить имена полей через `.env`:
+
+```env
+BITRIX_SPAIN_VISA_GENDER_MALE_FIELD="Check Box13"
+BITRIX_SPAIN_VISA_GENDER_FEMALE_FIELD="Check Box14"
+BITRIX_SPAIN_VISA_GENDER_OTHER_FIELD="Check Box15"
+BITRIX_SPAIN_VISA_MARITAL_SINGLE_FIELD="Check Box16"
+BITRIX_SPAIN_VISA_MARITAL_MARRIED_FIELD="Check Box17"
+BITRIX_SPAIN_VISA_MARITAL_DIVORCED_FIELD="Check Box20"
+BITRIX_SPAIN_VISA_MARITAL_WIDOWED_FIELD="Check Box21"
+BITRIX_SPAIN_VISA_NATIONAL_IDENTITY_FIELD="Text36"
+```
+
 ### Маппинг полей Bitrix → форма
 
 | Поле формы (name/id) | Bitrix Contact |

@@ -12,13 +12,29 @@ def apply_fields(field_refs, values):
         name = field.get("/T")
 
         if name in values:
-            value = str(values[name])
-            field.update(
-                {
-                    NameObject("/V"): TextStringObject(value),
-                    NameObject("/DV"): TextStringObject(value),
-                }
-            )
+            value = values[name]
+            field_type = field.get("/FT")
+
+            if field_type == "/Btn":
+                if isinstance(value, str) and value.startswith("/"):
+                    state_name = NameObject(value)
+                else:
+                    state_name = NameObject(str(value))
+
+                field.update(
+                    {
+                        NameObject("/V"): state_name,
+                        NameObject("/AS"): state_name,
+                    }
+                )
+            else:
+                text_value = str(value)
+                field.update(
+                    {
+                        NameObject("/V"): TextStringObject(text_value),
+                        NameObject("/DV"): TextStringObject(text_value),
+                    }
+                )
 
         kids = field.get("/Kids")
         if kids:
@@ -48,6 +64,14 @@ def main() -> int:
         if acro_fields:
             apply_fields(acro_fields, fields)
         acro.update({NameObject("/NeedAppearances"): BooleanObject(True)})
+
+    # Some templates keep visible widget annotations detached from the AcroForm
+    # field array after cloning. Update page annotations as well to ensure
+    # checkbox states and text values are actually rendered.
+    for page in writer.pages:
+        annots = page.get("/Annots")
+        if annots:
+            apply_fields(annots, fields)
 
     with open(output_path, "wb") as out:
         writer.write(out)
