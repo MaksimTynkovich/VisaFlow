@@ -174,10 +174,10 @@ return [
     | Поле PDF для пункта 11 (национальный документ, если применимо)
     |--------------------------------------------------------------------------
     |
-    | Имя поля (/T) в PDF. По умолчанию Text36 для текущего шаблона.
+    | Имя поля (/T) в PDF. По умолчанию Text24 для текущего шаблона.
     |
     */
-    'spain_visa_national_identity_field' => env('BITRIX_SPAIN_VISA_NATIONAL_IDENTITY_FIELD', 'Text36'),
+    'spain_visa_national_identity_field' => env('BITRIX_SPAIN_VISA_NATIONAL_IDENTITY_FIELD', 'Text24'),
 
     /*
     |--------------------------------------------------------------------------

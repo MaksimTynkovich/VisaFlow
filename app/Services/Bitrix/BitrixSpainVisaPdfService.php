@@ -144,13 +144,18 @@ class BitrixSpainVisaPdfService
         $passportNo = $this->toUpper($this->firstNonEmpty($contact, [
             'UF_CRM_PASSPORT_NO',
             'UF_CRM_1470546337',
-            'UF_CRM_1470546300',
         ]));
         $nationalIdentityNo = $this->toUpper($this->firstNonEmpty($contact, ['UF_CRM_1470546300']));
-        $nationalIdentityField = trim((string) config('bitrix.spain_visa_national_identity_field', 'Text36'));
-        $passportIssueDate = $this->toDate($this->firstNonEmpty($contact, ['UF_CRM_PASSPORT_ISSUE_DATE']));
-        $passportExpiryDate = $this->toDate($this->firstNonEmpty($contact, ['UF_CRM_PASSPORT_EXPIRY_DATE']));
-        $passportIssuedByCountry = $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_PASSPORT_ISSUED_BY_COUNTRY', 'ADDRESS_COUNTRY']));
+        $nationalIdentityField = trim((string) config('bitrix.spain_visa_national_identity_field', 'Text24'));
+        $passportIssueDate = $this->toDate($this->firstNonEmpty($contact, [
+            'UF_CRM_PASSPORT_ISSUE_DATE',
+            'UF_CRM_1470563459',
+        ]));
+        $passportExpiryDate = $this->toDate($this->firstNonEmpty($contact, [
+            'UF_CRM_PASSPORT_EXPIRY_DATE',
+            'UF_CRM_1470563486',
+        ]));
+        $passportIssuedByCountry = $this->resolvePassportIssuedByCountry($contact);
 
         $phone = $this->extractMultiValue($contact, 'PHONE');
         $email = $this->extractMultiValue($contact, 'EMAIL');
@@ -434,6 +439,25 @@ class BitrixSpainVisaPdfService
         }
 
         $mapped = self::BIRTH_COUNTRY_ENUM[$raw] ?? $raw;
+
+        return $this->toIcao($mapped);
+    }
+
+    /**
+     * @param array<string, mixed> $contact
+     */
+    private function resolvePassportIssuedByCountry(array $contact): string
+    {
+        $raw = $this->firstNonEmpty($contact, [
+            'UF_CRM_PASSPORT_ISSUED_BY_COUNTRY',
+            'UF_CRM_1476883419',
+            'ADDRESS_COUNTRY',
+        ]);
+        if ($raw === '') {
+            return '';
+        }
+
+        $mapped = self::CURRENT_NATIONALITY_ENUM[$raw] ?? $raw;
 
         return $this->toIcao($mapped);
     }
