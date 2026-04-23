@@ -82,6 +82,39 @@ GET  /api/bitrix/create-form-from-deal?deal_id=123
 
 Продукт из сделки сохраняется в заявке (`bitrix_product_snapshot`) и доступен в API заявок (GET `/api/admin/travel-cases/{id}`) и в админке.
 
+**Скачать PDF-анкету Испании из сделки**
+
+```
+POST /api/bitrix/create-spain-visa-pdf
+GET  /api/bitrix/create-spain-visa-pdf?deal_id=123
+```
+
+Тело POST (JSON):
+```json
+{
+  "deal_id": 123
+}
+```
+
+Ответ: бинарный PDF-файл, поля остаются редактируемыми.
+
+Для чекбоксов пола в PDF можно переопределить имена полей через `.env`:
+
+```env
+BITRIX_SPAIN_VISA_GENDER_MALE_FIELD="Check Box13"
+BITRIX_SPAIN_VISA_GENDER_FEMALE_FIELD="Check Box14"
+BITRIX_SPAIN_VISA_GENDER_OTHER_FIELD="Check Box15"
+BITRIX_SPAIN_VISA_MARITAL_SINGLE_FIELD="Check Box16"
+BITRIX_SPAIN_VISA_MARITAL_MARRIED_FIELD="Check Box17"
+BITRIX_SPAIN_VISA_MARITAL_DIVORCED_FIELD="Check Box20"
+BITRIX_SPAIN_VISA_MARITAL_WIDOWED_FIELD="Check Box21"
+BITRIX_SPAIN_VISA_NATIONAL_IDENTITY_FIELD="Text24"
+BITRIX_SPAIN_VISA_RESIDENCE_OTHER_COUNTRY_NO_FIELD="Check Box50"
+BITRIX_SPAIN_VISA_RESIDENCE_OTHER_COUNTRY_FIELDS="Check Box72"
+BITRIX_SPAIN_VISA_MULTIPLE_ENTRIES_FIELD="Check Box74"
+BITRIX_SPAIN_VISA_FINGERPRINTS_NOT_TAKEN_FIELD="Check Box77"
+```
+
 ### Маппинг полей Bitrix → форма
 
 | Поле формы (name/id) | Bitrix Contact |

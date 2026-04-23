@@ -10,6 +10,7 @@ Route::post('/admin/auth/login', [AuthController::class, 'login']);
 
 // Bitrix24: создать форму из сделки (публичный webhook)
 Route::match(['get', 'post'], '/bitrix/create-form-from-deal', [BitrixWebhookController::class, 'createFormFromDeal']);
+Route::match(['get', 'post'], '/bitrix/create-spain-visa-pdf', [BitrixWebhookController::class, 'createSpainVisaPdf']);
 
 // Публичные роуты для форм
 Route::get('/public/form/{token}', [PublicFormController::class, 'show']);

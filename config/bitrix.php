@@ -158,4 +158,87 @@ return [
     */
     'form_base_url' => env('BITRIX_FORM_BASE_URL'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Шаблон PDF-анкеты Испании
+    |--------------------------------------------------------------------------
+    |
+    | Абсолютный путь к PDF с AcroForm-полями.
+    | Файл используется при вызове /api/bitrix/create-spain-visa-pdf.
+    |
+    */
+    'spain_visa_template_path' => env('BITRIX_SPAIN_VISA_TEMPLATE_PATH', '/spain-visa-template.pdf'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Поле PDF для пункта 11 (национальный документ, если применимо)
+    |--------------------------------------------------------------------------
+    |
+    | Имя поля (/T) в PDF. По умолчанию Text24 для текущего шаблона.
+    |
+    */
+    'spain_visa_national_identity_field' => env('BITRIX_SPAIN_VISA_NATIONAL_IDENTITY_FIELD', 'Text24'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Checkbox "No" для пункта о проживании в другой стране
+    |--------------------------------------------------------------------------
+    |
+    | Секция "Residente en un pais distinto del pais de nacionalidad actual".
+    | Значение должно совпадать с именем поля /T в PDF.
+    |
+    */
+    'spain_visa_residence_other_country_no_checkbox_field' => env('BITRIX_SPAIN_VISA_RESIDENCE_OTHER_COUNTRY_NO_FIELD', 'Check Box50'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Checkbox "Многократная" в секции "Количество въездов"
+    |--------------------------------------------------------------------------
+    |
+    | Значение должно совпадать с именем поля /T в PDF.
+    |
+    */
+    'spain_visa_multiple_entries_checkbox_field' => env('BITRIX_SPAIN_VISA_MULTIPLE_ENTRIES_FIELD', 'Check Box74'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Checkbox "Отпечатки пальцев не ставились ранее"
+    |--------------------------------------------------------------------------
+    |
+    | Значение должно совпадать с именем поля /T в PDF.
+    |
+    */
+    'spain_visa_fingerprints_not_taken_checkbox_field' => env('BITRIX_SPAIN_VISA_FINGERPRINTS_NOT_TAKEN_FIELD', 'Check Box77'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Имена checkbox-полей пола в PDF-анкете Испании
+    |--------------------------------------------------------------------------
+    |
+    | Значения должны совпадать с /T в PDF-полях.
+    | По умолчанию используются поля из текущего шаблона.
+    |
+    */
+    'spain_visa_gender_checkbox_fields' => [
+        'male' => env('BITRIX_SPAIN_VISA_GENDER_MALE_FIELD', 'Check Box13'),
+        'female' => env('BITRIX_SPAIN_VISA_GENDER_FEMALE_FIELD', 'Check Box14'),
+        'other' => env('BITRIX_SPAIN_VISA_GENDER_OTHER_FIELD', 'Check Box15'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Имена checkbox-полей семейного положения в PDF-анкете Испании
+    |--------------------------------------------------------------------------
+    |
+    | Значения должны совпадать с /T в PDF-полях.
+    | При необходимости подстройте под конкретный шаблон через .env.
+    |
+    */
+    'spain_visa_marital_status_checkbox_fields' => [
+        'single' => env('BITRIX_SPAIN_VISA_MARITAL_SINGLE_FIELD', 'Check Box16'),
+        'married' => env('BITRIX_SPAIN_VISA_MARITAL_MARRIED_FIELD', 'Check Box17'),
+        'divorced' => env('BITRIX_SPAIN_VISA_MARITAL_DIVORCED_FIELD', 'Check Box20'),
+        'widowed' => env('BITRIX_SPAIN_VISA_MARITAL_WIDOWED_FIELD', 'Check Box21'),
+    ],
+
 ];
