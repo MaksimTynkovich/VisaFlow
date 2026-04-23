@@ -99,9 +99,10 @@ class BitrixSpainVisaPdfService
         $outputPath = $tmpDir . DIRECTORY_SEPARATOR . $filename;
         $fieldsPath = $tmpDir . DIRECTORY_SEPARATOR . "spain_visa_{$dealId}_{$stamp}.json";
         file_put_contents($fieldsPath, json_encode($fields, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $pythonBin = (string) config('bitrix.python_bin', 'python3');
 
         $process = new Process([
-            'python3',
+            $pythonBin,
             base_path('scripts/fill_pdf_fields.py'),
             $templatePath,
             $outputPath,
