@@ -183,6 +183,13 @@ class BitrixSpainVisaPdfService
         $genderCheckboxes = $this->resolveGenderCheckboxValues($genderRaw);
         $maritalStatusRaw = $this->firstNonEmpty($contact, ['UF_CRM_1470544847', 'UF_CRM_MARITAL_STATUS', 'MARITAL_STATUS']);
         $maritalStatusCheckboxes = $this->resolveMaritalStatusCheckboxValues($maritalStatusRaw);
+        $residenceNoCheckboxField = trim((string) config('bitrix.spain_visa_residence_other_country_no_checkbox_field', 'Check Box50'));
+        $multipleEntriesCheckboxField = trim((string) config('bitrix.spain_visa_multiple_entries_checkbox_field', 'Check Box74'));
+        $fingerprintsNotTakenCheckboxField = trim((string) config('bitrix.spain_visa_fingerprints_not_taken_checkbox_field', 'Check Box77'));
+        $residenceOtherCheckboxFields = array_values(array_filter(array_map(
+            static fn (mixed $value): string => trim((string) $value),
+            (array) config('bitrix.spain_visa_residence_other_country_checkbox_fields', ['Check Box72'])
+        )));
 
         $baseFields = [
             'Text2' => $lastName,
@@ -205,6 +212,29 @@ class BitrixSpainVisaPdfService
             'Text75' => $entryDate,
             'Text76' => $exitDate,
         ];
+
+        if ($residenceNoCheckboxField !== '') {
+            // Section "Residente en un pais distinto..." should always be "No".
+            $baseFields[$residenceNoCheckboxField] = '/0';
+        }
+        if ($multipleEntriesCheckboxField !== '') {
+            // Section "Numero de entradas solicitadas": force multiple entries.
+            $baseFields[$multipleEntriesCheckboxField] = '/0';
+        }
+        if ($fingerprintsNotTakenCheckboxField !== '') {
+            // Section "Huellas dactilares tomadas previamente": select "No".
+            $baseFields[$fingerprintsNotTakenCheckboxField] = '/0';
+        }
+        foreach ($residenceOtherCheckboxFields as $fieldName) {
+            if (
+                $fieldName !== ''
+                && $fieldName !== $residenceNoCheckboxField
+                && $fieldName !== $multipleEntriesCheckboxField
+                && $fieldName !== $fingerprintsNotTakenCheckboxField
+            ) {
+                $baseFields[$fieldName] = '/Off';
+            }
+        }
 
         if ($nationalIdentityField !== '') {
             $baseFields[$nationalIdentityField] = $nationalIdentityNo;
