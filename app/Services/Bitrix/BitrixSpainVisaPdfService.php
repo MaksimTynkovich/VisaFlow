@@ -178,8 +178,16 @@ class BitrixSpainVisaPdfService
             $this->firstNonEmpty($contact, ['UF_CRM_EMPLOYER_PHONE']),
         ]));
 
-        $entryDate = $this->toDate($this->firstNonEmpty($deal, ['UF_CRM_VISA_ENTRY_DATE', 'BEGINDATE']));
-        $exitDate = $this->toDate($this->firstNonEmpty($deal, ['UF_CRM_VISA_EXIT_DATE', 'CLOSEDATE']));
+        $entryDate = $this->toDate($this->firstNonEmpty($deal, [
+            'UF_CRM_1537884549',
+            'UF_CRM_VISA_ENTRY_DATE',
+            'BEGINDATE',
+        ]));
+        $exitDate = $this->toDate($this->firstNonEmpty($deal, [
+            'UF_CRM_1537885585',
+            'UF_CRM_VISA_EXIT_DATE',
+            'CLOSEDATE',
+        ]));
         $genderRaw = $this->firstNonEmpty($contact, ['UF_CRM_GENDER', 'UF_CRM_SEX', 'UF_CRM_1470563687', 'GENDER', 'SEX']);
         $genderCheckboxes = $this->resolveGenderCheckboxValues($genderRaw);
         $maritalStatusRaw = $this->firstNonEmpty($contact, ['UF_CRM_1470544847', 'UF_CRM_MARITAL_STATUS', 'MARITAL_STATUS']);
@@ -210,6 +218,7 @@ class BitrixSpainVisaPdfService
             'Text55' => $occupation,
             'Text56' => $employer,
             'Text69' => 'SPAIN',
+            'Text70' => 'POLAND',
             'Text75' => $entryDate,
             'Text76' => $exitDate,
         ];
