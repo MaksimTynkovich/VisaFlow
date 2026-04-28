@@ -63,7 +63,12 @@ class BitrixSpainVisaPdfService
     }
 
     /**
-     * @return array{output_path: string, filename: string}
+     * @return array{
+     *     output_path: string,
+     *     filename: string,
+     *     deal: array<string, mixed>,
+     *     contact: array<string, mixed>
+     * }
      */
     public function generateFromDeal(int $dealId): array
     {
@@ -125,6 +130,8 @@ class BitrixSpainVisaPdfService
         return [
             'output_path' => $outputPath,
             'filename' => $filename,
+            'deal' => $deal,
+            'contact' => $contact,
         ];
     }
 
