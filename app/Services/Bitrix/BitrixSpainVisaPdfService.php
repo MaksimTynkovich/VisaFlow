@@ -160,23 +160,10 @@ class BitrixSpainVisaPdfService
 
         $phone = $this->extractMultiValue($contact, 'PHONE');
         $email = $this->extractMultiValue($contact, 'EMAIL');
-        $homeAddress = $this->toIcao($this->compactAddress([
-            $this->firstNonEmpty($contact, ['ADDRESS_COUNTRY']),
-            $this->firstNonEmpty($contact, ['ADDRESS_POSTAL_CODE']),
-            $this->firstNonEmpty($contact, ['ADDRESS_CITY']),
-            $this->firstNonEmpty($contact, ['ADDRESS']),
-            $email,
-        ]));
+        $homeAddress = $this->buildRegistrationAddress($contact, $email);
 
         $occupation = $this->toIcao($this->firstNonEmpty($contact, ['POST', 'UF_CRM_OCCUPATION']));
-        $employer = $this->toIcao($this->compactAddress([
-            $this->firstNonEmpty($contact, ['UF_CRM_EMPLOYER_NAME']),
-            $this->firstNonEmpty($contact, ['UF_CRM_EMPLOYER_COUNTRY']),
-            $this->firstNonEmpty($contact, ['UF_CRM_EMPLOYER_POSTAL_CODE']),
-            $this->firstNonEmpty($contact, ['UF_CRM_EMPLOYER_CITY']),
-            $this->firstNonEmpty($contact, ['UF_CRM_EMPLOYER_ADDRESS']),
-            $this->firstNonEmpty($contact, ['UF_CRM_EMPLOYER_PHONE']),
-        ]));
+        $employer = $this->buildEmployerOrganizationAddress($contact);
 
         $entryDate = $this->toDate($this->firstNonEmpty($deal, [
             'UF_CRM_1537884549',
@@ -328,6 +315,114 @@ class BitrixSpainVisaPdfService
     private function toUpper(string $value): string
     {
         return mb_strtoupper(trim($value));
+    }
+
+    /**
+     * Адрес работодателя для Text56: название, улица, дом, …, страна (EN_NAME из списка), телефон.
+     *
+     * @param array<string, mixed> $contact
+     */
+    private function buildEmployerOrganizationAddress(array $contact): string
+    {
+        $iblockId = (int) config('bitrix.employer_country_list_iblock_id', 292);
+        $iblockTypeId = (string) config('bitrix.employer_country_list_iblock_type_id', 'lists');
+
+        $countryElementId = $this->firstNonEmpty($contact, ['UF_CRM_69036B3BEEE67']);
+        $countryEn = $countryElementId !== ''
+            ? $this->bitrixApi->getListElementEnNameById($iblockId, $countryElementId, $iblockTypeId)
+            : '';
+        $countryEn = mb_strtoupper(trim($countryEn));
+
+        $parts = [
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_1475150386'])),
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69036648A09F9'])),
+            $this->firstNonEmpty($contact, ['UF_CRM_6903664985439']),
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69B7FC9251B41'])),
+            $this->firstNonEmpty($contact, ['UF_CRM_69036648C634A']),
+            $this->firstNonEmpty($contact, ['UF_CRM_1475150302']),
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69023480CB223'])),
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_1475150284'])),
+            $countryEn,
+            $this->firstNonEmpty($contact, ['UF_CRM_1475150345']),
+        ];
+
+        $segments = [];
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part !== '') {
+                $segments[] = $part;
+            }
+        }
+
+        return implode(', ', $segments);
+    }
+
+    /**
+     * Адрес прописки для Text48:
+     * улица, дом, корпус, квартира, индекс, область (по правилу), город, страна (EN_NAME), email.
+     *
+     * @param array<string, mixed> $contact
+     */
+    private function buildRegistrationAddress(array $contact, string $email): string
+    {
+        $iblockId = (int) config('bitrix.employer_country_list_iblock_id', 292);
+        $iblockTypeId = (string) config('bitrix.employer_country_list_iblock_type_id', 'lists');
+
+        $cityRaw = $this->firstNonEmpty($contact, ['UF_CRM_1470544964']);
+        $regionRaw = $this->firstNonEmpty($contact, ['UF_CRM_69022DA92F3CB']);
+        $region = $this->shouldIncludeRegistrationRegion($cityRaw) ? $this->toIcao($regionRaw) : '';
+
+        $countryElementId = $this->firstNonEmpty($contact, ['UF_CRM_69022C3709EA5']);
+        $countryEn = $countryElementId !== ''
+            ? $this->bitrixApi->getListElementEnNameById($iblockId, $countryElementId, $iblockTypeId)
+            : '';
+        $countryEn = mb_strtoupper(trim($countryEn));
+
+        $parts = [
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_1470544975'])),
+            $this->firstNonEmpty($contact, ['UF_CRM_1470544992']),
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69B7FC9251B41'])),
+            $this->firstNonEmpty($contact, ['UF_CRM_1470545008']),
+            $this->firstNonEmpty($contact, ['UF_CRM_1476885071']),
+            $region,
+            $this->toIcao($cityRaw),
+            $countryEn,
+            trim($email),
+        ];
+
+        $segments = [];
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part !== '') {
+                $segments[] = $part;
+            }
+        }
+
+        return implode(', ', $segments);
+    }
+
+    private function shouldIncludeRegistrationRegion(string $city): bool
+    {
+        $city = mb_strtolower(trim($city));
+        if ($city === '') {
+            return true;
+        }
+
+        return !in_array($city, [
+            'гродно',
+            'брест',
+            'минск',
+            'гомель',
+            'могилев',
+            'могилёв',
+            'витебск',
+            'grodno',
+            'brest',
+            'minsk',
+            'gomel',
+            'mogilev',
+            'vitebsk',
+        ], true);
     }
 
     /**

@@ -84,6 +84,110 @@ class BitrixApiService
     }
 
     /**
+     * Значение свойства EN_NAME элемента универсального списка по ID (для iblock_element в CRM).
+     *
+     * @param int|string|null $elementId ID элемента списка
+     */
+    public function getListElementEnNameById(int $iblockId, int|string|null $elementId, string $iblockTypeId = 'lists'): string
+    {
+        if ($elementId === null || $elementId === '') {
+            return '';
+        }
+        $id = (int) $elementId;
+        if ($id <= 0) {
+            return '';
+        }
+
+        $cacheKey = 'bitrix:list_en_name:' . $iblockTypeId . ':' . $iblockId . ':' . $id;
+
+        /** @var string */
+        return Cache::remember($cacheKey, 3600, function () use ($iblockId, $id, $iblockTypeId): string {
+            $base = [
+                'IBLOCK_TYPE_ID' => $iblockTypeId,
+                'IBLOCK_ID' => $iblockId,
+                'FILTER' => ['=ID' => $id],
+            ];
+            $result = $this->call('lists.element.get', $base);
+            if (!is_array($result) || $result === []) {
+                $result = $this->call('lists.element.get', [
+                    'iblockTypeId' => $iblockTypeId,
+                    'iblockId' => $iblockId,
+                    'filter' => ['=ID' => $id],
+                ]);
+            }
+            if (!is_array($result) || $result === []) {
+                return '';
+            }
+            $first = null;
+            if (isset($result[0]) && is_array($result[0])) {
+                $first = $result[0];
+            } else {
+                foreach ($result as $row) {
+                    if (is_array($row)) {
+                        $first = $row;
+                        break;
+                    }
+                }
+            }
+            if (!is_array($first)) {
+                return '';
+            }
+
+            return $this->extractListElementEnNameValue($first);
+        });
+    }
+
+    /**
+     * @param array<string, mixed> $element
+     */
+    private function extractListElementEnNameValue(array $element): string
+    {
+        foreach (['EN_NAME', 'PROPERTY_EN_NAME', 'propertyEnName', 'enName'] as $key) {
+            $raw = $element[$key] ?? null;
+            $text = $this->normalizeListPropertyScalar($raw);
+            if ($text !== '') {
+                return $text;
+            }
+        }
+        foreach ($element as $k => $v) {
+            if (!is_string($k)) {
+                continue;
+            }
+            if (strtoupper($k) === 'EN_NAME' || str_contains(strtoupper($k), 'EN_NAME')) {
+                $text = $this->normalizeListPropertyScalar($v);
+                if ($text !== '') {
+                    return $text;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function normalizeListPropertyScalar(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+        if (is_scalar($value)) {
+            return trim((string) $value);
+        }
+        if (is_array($value)) {
+            if (array_key_exists('VALUE', $value)) {
+                return $this->normalizeListPropertyScalar($value['VALUE']);
+            }
+            foreach ($value as $item) {
+                $t = $this->normalizeListPropertyScalar($item);
+                if ($t !== '') {
+                    return $t;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * Получить ID контактов, связанных со сделкой.
      *
      * @return int[]
