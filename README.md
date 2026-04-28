@@ -82,7 +82,7 @@ GET  /api/bitrix/create-form-from-deal?deal_id=123
 
 Продукт из сделки сохраняется в заявке (`bitrix_product_snapshot`) и доступен в API заявок (GET `/api/admin/travel-cases/{id}`) и в админке.
 
-**Скачать PDF-анкету Испании из сделки**
+**Сгенерировать PDF-анкету Испании и загрузить в сделку Bitrix**
 
 ```
 POST /api/bitrix/create-spain-visa-pdf
@@ -96,7 +96,20 @@ GET  /api/bitrix/create-spain-visa-pdf?deal_id=123
 }
 ```
 
-Ответ: бинарный PDF-файл, поля остаются редактируемыми.
+Ответ (пример):
+```json
+{
+  "data": {
+    "deal_id": 123,
+    "title": "Schengen Spain, IVANOV IVAN, AB8795569",
+    "number": "28042026-1",
+    "filename": "spain_visa_deal_123_20260428_160000.pdf",
+    "document": {
+      "id": 456
+    }
+  }
+}
+```
 
 Для чекбоксов пола в PDF можно переопределить имена полей через `.env`:
 

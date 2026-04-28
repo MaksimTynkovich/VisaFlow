@@ -449,6 +449,34 @@ class BitrixApiService
     }
 
     /**
+     * Загрузить готовый документ в генератор документов CRM и привязать к сделке.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function uploadDealDocument(
+        int $dealId,
+        string $fileContentBase64,
+        string $pdfContentBase64,
+        string $title,
+        string $number,
+        string $region = 'ru'
+    ): ?array {
+        $result = $this->call('crm.documentgenerator.document.upload', [
+            'fields' => [
+                'entityTypeId' => 2,
+                'entityId' => $dealId,
+                'fileContent' => $fileContentBase64,
+                'pdfContent' => $pdfContentBase64,
+                'region' => $region,
+                'title' => $title,
+                'number' => $number,
+            ],
+        ]);
+
+        return is_array($result) ? $result : null;
+    }
+
+    /**
      * Список полей контакта Bitrix24 для маппинга (код + название).
      * Кэшируется на 1 час. При добавлении/удалении полей в Bitrix — обновится после истечения кэша или сброса кэша.
      *
