@@ -142,10 +142,22 @@ class BitrixSpainVisaPdfService
      */
     private function buildPdfFieldMap(array $deal, array $contact): array
     {
-        $lastName = $this->toIcao($this->firstNonEmpty($contact, ['LAST_NAME', 'UF_CRM_LAST_NAME_LAT']));
-        $firstName = $this->toIcao($this->firstNonEmpty($contact, ['NAME', 'UF_CRM_NAME_LAT']));
+        $lastName = $this->firstNonEmpty($contact, [
+            'UF_CRM_1471683129',
+            'LAST_NAME',
+            'UF_CRM_LAST_NAME_LAT',
+        ]);
+        $maidenOrPreviousSurname = $this->firstNonEmpty($contact, ['UF_CRM_1470544731']);
+        $firstName = $this->firstNonEmpty($contact, [
+            'UF_CRM_1471683145',
+            'NAME',
+            'UF_CRM_NAME_LAT',
+        ]);
         $birthDate = $this->toDate($this->firstNonEmpty($contact, ['BIRTHDATE']));
-        $birthPlace = $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_BIRTH_PLACE', 'ADDRESS_CITY']));
+        $birthPlace = $this->toIcao($this->firstNonEmpty($contact, [
+            'UF_CRM_1470563406',
+            'UF_CRM_BIRTH_PLACE',
+        ]));
         $birthCountry = $this->resolveBirthCountry($contact);
         $nationality = $this->resolveCurrentNationality($contact);
 
@@ -169,7 +181,11 @@ class BitrixSpainVisaPdfService
         $email = $this->extractMultiValue($contact, 'EMAIL');
         $homeAddress = $this->buildRegistrationAddress($contact, $email);
 
-        $occupation = $this->toIcao($this->firstNonEmpty($contact, ['POST', 'UF_CRM_OCCUPATION']));
+        $occupation = $this->toIcao($this->firstNonEmpty($contact, [
+            'UF_CRM_1673253178585',
+            'POST',
+            'UF_CRM_OCCUPATION',
+        ]));
         $employer = $this->buildEmployerOrganizationAddress($contact);
 
         $entryDate = $this->toDate($this->firstNonEmpty($deal, [
@@ -196,7 +212,7 @@ class BitrixSpainVisaPdfService
 
         $baseFields = [
             'Text2' => $lastName,
-            'Text3' => $lastName,
+            'Text3' => $maidenOrPreviousSurname,
             'Text4' => $firstName,
             'Text5' => $birthDate,
             'Text6' => $birthPlace,
@@ -365,8 +381,8 @@ class BitrixSpainVisaPdfService
     }
 
     /**
-     * Адрес прописки для Text48:
-     * улица, дом, корпус, квартира, индекс, область (по правилу), город, страна (EN_NAME), email.
+     * Адрес прописки для Text48 (международный порядок):
+     * страна, индекс, область (если включаем по правилу), город, улица, дом, корпус/строение, квартира, email.
      *
      * @param array<string, mixed> $contact
      */
@@ -385,16 +401,24 @@ class BitrixSpainVisaPdfService
             : '';
         $countryEn = mb_strtoupper(trim($countryEn));
 
+        $index = $this->firstNonEmpty($contact, ['UF_CRM_1476885071']);
+        $city = $this->toIcao($cityRaw);
+        $street = $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_1470544975']));
+        $house = $this->firstNonEmpty($contact, ['UF_CRM_1470544992']);
+        $building = $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69B7FC9251B41']));
+        $apartment = $this->firstNonEmpty($contact, ['UF_CRM_1470545008']);
+        $emailTrim = trim($email);
+
         $parts = [
-            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_1470544975'])),
-            $this->firstNonEmpty($contact, ['UF_CRM_1470544992']),
-            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69B7FC9251B41'])),
-            $this->firstNonEmpty($contact, ['UF_CRM_1470545008']),
-            $this->firstNonEmpty($contact, ['UF_CRM_1476885071']),
-            $region,
-            $this->toIcao($cityRaw),
             $countryEn,
-            trim($email),
+            $index,
+            $region,
+            $city,
+            $street,
+            $house,
+            $building,
+            $apartment,
+            $emailTrim,
         ];
 
         $segments = [];
