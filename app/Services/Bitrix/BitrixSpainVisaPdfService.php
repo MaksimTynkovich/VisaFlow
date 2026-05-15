@@ -260,7 +260,139 @@ class BitrixSpainVisaPdfService
             $baseFields[$nationalIdentityField] = $nationalIdentityNo;
         }
 
+        $legalRepresentativeText = $this->buildLegalRepresentativeField($deal);
+        if ($legalRepresentativeText !== '') {
+            $baseFields['Text23'] = $legalRepresentativeText;
+        }
+
         return array_merge($baseFields, $genderCheckboxes, $maritalStatusCheckboxes);
+    }
+
+    /**
+     * Text23: законный представитель (только если в сделке заполнено UF_CRM_1537884163).
+     * Формат: фамилия, имя, прописка, телефон, email, гражданство (EN_NAME, верхний регистр).
+     */
+    private function buildLegalRepresentativeField(array $deal): string
+    {
+        $repContactId = $this->resolveLegalRepresentativeContactId($deal);
+        if ($repContactId === null) {
+            return '';
+        }
+
+        $repContact = $this->bitrixApi->getContact($repContactId);
+        if ($repContact === null) {
+            return '';
+        }
+
+        $lastName = $this->firstNonEmpty($repContact, ['UF_CRM_1471683129']);
+        $firstName = $this->firstNonEmpty($repContact, ['UF_CRM_1471683145']);
+        $phone = $this->extractMultiValue($repContact, 'PHONE');
+        $email = $this->extractMultiValue($repContact, 'EMAIL');
+        $registration = $this->buildRegistrationAddress($repContact, $email);
+        $citizenship = $this->resolveCitizenshipFromIblock($repContact);
+
+        return $this->compactAddress([
+            $lastName,
+            $firstName,
+            $registration,
+            $phone,
+            $email,
+            $citizenship,
+        ]);
+    }
+
+    /**
+     * ID контакта законного представителя из поля сделки UF_CRM_1537884163.
+     *
+     * @param array<string, mixed> $deal
+     */
+    private function resolveLegalRepresentativeContactId(array $deal): ?int
+    {
+        $raw = $deal['UF_CRM_1537884163'] ?? null;
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        if (is_numeric($raw)) {
+            $id = (int) $raw;
+
+            return $id > 0 ? $id : null;
+        }
+
+        if (is_string($raw)) {
+            $raw = trim($raw);
+            if ($raw === '') {
+                return null;
+            }
+            if (is_numeric($raw)) {
+                $id = (int) $raw;
+
+                return $id > 0 ? $id : null;
+            }
+
+            return null;
+        }
+
+        if (!is_array($raw)) {
+            return null;
+        }
+
+        if (isset($raw['CONTACT_ID']) && is_numeric($raw['CONTACT_ID'])) {
+            $id = (int) $raw['CONTACT_ID'];
+
+            return $id > 0 ? $id : null;
+        }
+
+        if (isset($raw['VALUE']) && is_scalar($raw['VALUE']) && is_numeric((string) $raw['VALUE'])) {
+            $id = (int) $raw['VALUE'];
+
+            return $id > 0 ? $id : null;
+        }
+
+        if (isset($raw['ID']) && is_numeric($raw['ID'])) {
+            $id = (int) $raw['ID'];
+
+            return $id > 0 ? $id : null;
+        }
+
+        $first = $raw[0] ?? null;
+        if (is_numeric($first)) {
+            $id = (int) $first;
+
+            return $id > 0 ? $id : null;
+        }
+
+        if (is_array($first)) {
+            foreach (['CONTACT_ID', 'VALUE', 'ID'] as $key) {
+                if (isset($first[$key]) && is_numeric($first[$key])) {
+                    $id = (int) $first[$key];
+
+                    return $id > 0 ? $id : null;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Гражданство сейчас (UF_CRM_691825F2E3284) — EN_NAME из списка, верхний регистр.
+     *
+     * @param array<string, mixed> $contact
+     */
+    private function resolveCitizenshipFromIblock(array $contact): string
+    {
+        $iblockId = (int) config('bitrix.employer_country_list_iblock_id', 292);
+        $iblockTypeId = (string) config('bitrix.employer_country_list_iblock_type_id', 'lists');
+
+        $elementId = $this->firstNonEmpty($contact, ['UF_CRM_691825F2E3284']);
+        if ($elementId === '') {
+            return '';
+        }
+
+        $enName = $this->bitrixApi->getListElementEnNameById($iblockId, $elementId, $iblockTypeId);
+
+        return mb_strtoupper(trim($enName));
     }
 
     /**
