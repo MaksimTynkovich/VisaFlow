@@ -473,7 +473,8 @@ class BitrixSpainVisaPdfService
     }
 
     /**
-     * Адрес работодателя для Text56: название, улица, дом, …, страна (EN_NAME из списка), телефон.
+     * Адрес работодателя для Text56:
+     * название, страна, индекс, область, город, улица, дом, офис, корпус, телефон.
      *
      * @param array<string, mixed> $contact
      */
@@ -488,33 +489,23 @@ class BitrixSpainVisaPdfService
             : '';
         $countryEn = mb_strtoupper(trim($countryEn));
 
-        $parts = [
+        return $this->compactAddress([
             $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_1475150386'])),
-            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69036648A09F9'])),
-            $this->firstNonEmpty($contact, ['UF_CRM_6903664985439']),
-            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69B7FC9251B41'])),
-            $this->firstNonEmpty($contact, ['UF_CRM_69036648C634A']),
+            $countryEn,
             $this->firstNonEmpty($contact, ['UF_CRM_1475150302']),
             $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69023480CB223'])),
             $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_1475150284'])),
-            $countryEn,
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69036648A09F9'])),
+            $this->firstNonEmpty($contact, ['UF_CRM_6903664985439']),
+            $this->firstNonEmpty($contact, ['UF_CRM_69036648C634A']),
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69B7FC9251B41'])),
             $this->firstNonEmpty($contact, ['UF_CRM_1475150345']),
-        ];
-
-        $segments = [];
-        foreach ($parts as $part) {
-            $part = trim($part);
-            if ($part !== '') {
-                $segments[] = $part;
-            }
-        }
-
-        return implode(', ', $segments);
+        ]);
     }
 
     /**
-     * Адрес прописки для Text48 (международный порядок):
-     * страна, индекс, область (если включаем по правилу), город, улица, дом, корпус/строение, квартира, email.
+     * Адрес прописки для Text48:
+     * страна (EN_NAME, верхний регистр), индекс, область, город, улица, дом, корпус, квартира, email.
      *
      * @param array<string, mixed> $contact
      */
@@ -533,40 +524,22 @@ class BitrixSpainVisaPdfService
             : '';
         $countryEn = mb_strtoupper(trim($countryEn));
 
-        $index = $this->firstNonEmpty($contact, ['UF_CRM_1476885071']);
-        $city = $this->toIcao($cityRaw);
-        $street = $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_1470544975']));
-        $house = $this->firstNonEmpty($contact, ['UF_CRM_1470544992']);
-        $building = $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69B7FC9251B41']));
-        $apartment = $this->firstNonEmpty($contact, ['UF_CRM_1470545008']);
-        $emailTrim = trim($email);
-
-        $parts = [
+        return $this->compactAddress([
             $countryEn,
-            $index,
+            $this->firstNonEmpty($contact, ['UF_CRM_1476885071']),
             $region,
-            $city,
-            $street,
-            $house,
-            $building,
-            $apartment,
-            $emailTrim,
-        ];
-
-        $segments = [];
-        foreach ($parts as $part) {
-            $part = trim($part);
-            if ($part !== '') {
-                $segments[] = $part;
-            }
-        }
-
-        return implode(', ', $segments);
+            $this->toIcao($cityRaw),
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_1470544975'])),
+            $this->firstNonEmpty($contact, ['UF_CRM_1470544992']),
+            $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_69B7FC9251B41'])),
+            $this->firstNonEmpty($contact, ['UF_CRM_1470545008']),
+            trim($email),
+        ]);
     }
 
     private function shouldIncludeRegistrationRegion(string $city): bool
     {
-        $city = mb_strtolower(trim($city));
+        $city = $this->normalizeRegistrationCityName($city);
         if ($city === '') {
             return true;
         }
@@ -586,6 +559,19 @@ class BitrixSpainVisaPdfService
             'mogilev',
             'vitebsk',
         ], true);
+    }
+
+    private function normalizeRegistrationCityName(string $city): string
+    {
+        $city = mb_strtolower(trim($city));
+        if ($city === '') {
+            return '';
+        }
+
+        $city = preg_replace('/^г\.?\s+/u', '', $city) ?? $city;
+        $city = preg_replace('/^город\s+/u', '', $city) ?? $city;
+
+        return trim($city);
     }
 
     /**
