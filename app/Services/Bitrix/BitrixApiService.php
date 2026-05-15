@@ -102,39 +102,93 @@ class BitrixApiService
 
         /** @var string */
         return Cache::remember($cacheKey, 3600, function () use ($iblockId, $id, $iblockTypeId): string {
-            $base = [
-                'IBLOCK_TYPE_ID' => $iblockTypeId,
-                'IBLOCK_ID' => $iblockId,
-                'FILTER' => ['=ID' => $id],
-            ];
-            $result = $this->call('lists.element.get', $base);
-            if (!is_array($result) || $result === []) {
-                $result = $this->call('lists.element.get', [
-                    'iblockTypeId' => $iblockTypeId,
-                    'iblockId' => $iblockId,
-                    'filter' => ['=ID' => $id],
-                ]);
-            }
-            if (!is_array($result) || $result === []) {
-                return '';
-            }
-            $first = null;
-            if (isset($result[0]) && is_array($result[0])) {
-                $first = $result[0];
-            } else {
-                foreach ($result as $row) {
-                    if (is_array($row)) {
-                        $first = $row;
-                        break;
-                    }
-                }
-            }
-            if (!is_array($first)) {
+            $element = $this->fetchListElementRow($iblockId, $id, $iblockTypeId);
+            if ($element === null) {
                 return '';
             }
 
-            return $this->extractListElementEnNameValue($first);
+            return $this->extractListElementEnNameValue($element);
         });
+    }
+
+    /**
+     * Название элемента универсального списка по ID (поле NAME).
+     *
+     * @param int|string|null $elementId ID элемента списка
+     */
+    public function getListElementNameById(int $iblockId, int|string|null $elementId, string $iblockTypeId = 'lists'): string
+    {
+        if ($elementId === null || $elementId === '') {
+            return '';
+        }
+        $id = (int) $elementId;
+        if ($id <= 0) {
+            return '';
+        }
+
+        $cacheKey = 'bitrix:list_name:' . $iblockTypeId . ':' . $iblockId . ':' . $id;
+
+        /** @var string */
+        return Cache::remember($cacheKey, 3600, function () use ($iblockId, $id, $iblockTypeId): string {
+            $element = $this->fetchListElementRow($iblockId, $id, $iblockTypeId);
+            if ($element === null) {
+                return '';
+            }
+
+            return $this->extractListElementNameValue($element);
+        });
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function fetchListElementRow(int $iblockId, int $id, string $iblockTypeId): ?array
+    {
+        $base = [
+            'IBLOCK_TYPE_ID' => $iblockTypeId,
+            'IBLOCK_ID' => $iblockId,
+            'FILTER' => ['=ID' => $id],
+        ];
+        $result = $this->call('lists.element.get', $base);
+        if (!is_array($result) || $result === []) {
+            $result = $this->call('lists.element.get', [
+                'iblockTypeId' => $iblockTypeId,
+                'iblockId' => $iblockId,
+                'filter' => ['=ID' => $id],
+            ]);
+        }
+        if (!is_array($result) || $result === []) {
+            return null;
+        }
+        if (isset($result[0]) && is_array($result[0])) {
+            return $result[0];
+        }
+        foreach ($result as $row) {
+            if (is_array($row)) {
+                return $row;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $element
+     */
+    private function extractListElementNameValue(array $element): string
+    {
+        foreach (['NAME', 'name'] as $key) {
+            $raw = $element[$key] ?? null;
+            if (is_array($raw)) {
+                $raw = reset($raw);
+            }
+            $text = $this->normalizeListPropertyScalar($raw);
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return '';
     }
 
     /**

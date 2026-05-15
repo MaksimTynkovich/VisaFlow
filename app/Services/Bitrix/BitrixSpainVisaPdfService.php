@@ -39,6 +39,39 @@ class BitrixSpainVisaPdfService
      *
      * @var array<string, string>
      */
+    /**
+     * Чекбоксы цели поездки в PDF (секция «Цель поездки»).
+     *
+     * @var string[]
+     */
+    private const TRIP_PURPOSE_CHECKBOX_FIELDS = [
+        'Check Box57',
+        'Check Box58',
+        'Check Box59',
+        'Check Box60',
+        'Check Box61',
+        'Check Box62',
+        'Check Box63',
+        'Check Box64',
+        'Check Box66',
+        'Check Box67',
+    ];
+
+    /**
+     * ID элемента списка «Тип визы» (iblock 324) => поле PDF.
+     *
+     * @var array<string, string>
+     */
+    private const TRIP_PURPOSE_LIST_ELEMENT_CHECKBOX = [
+        '5226' => 'Check Box57',
+        '5230' => 'Check Box58',
+        '5244' => 'Check Box59',
+        '5252' => 'Check Box62',
+        '5246' => 'Check Box63',
+        '5234' => 'Check Box64',
+        '5232' => 'Check Box66',
+    ];
+
     private const BIRTH_COUNTRY_ENUM = [
         '268' => 'BELARUS',
         '270' => 'RUSSIA',
@@ -92,7 +125,7 @@ class BitrixSpainVisaPdfService
             throw new RuntimeException("Contact {$contactId} was not found in Bitrix.");
         }
 
-        $fields = $this->buildPdfFieldMap($deal, $contact);
+        $fields = $this->buildPdfFieldMap($dealId, $deal, $contact);
 
         $tmpDir = storage_path('app/tmp');
         if (!is_dir($tmpDir)) {
@@ -140,7 +173,7 @@ class BitrixSpainVisaPdfService
      * @param array<string, mixed> $contact
      * @return array<string, string>
      */
-    private function buildPdfFieldMap(array $deal, array $contact): array
+    private function buildPdfFieldMap(int $dealId, array $deal, array $contact): array
     {
         $lastName = $this->firstNonEmpty($contact, [
             'UF_CRM_1471683129',
@@ -265,7 +298,139 @@ class BitrixSpainVisaPdfService
             $baseFields['Text23'] = $legalRepresentativeText;
         }
 
-        return array_merge($baseFields, $genderCheckboxes, $maritalStatusCheckboxes);
+        $tripPurposeCheckboxes = $this->resolveTripPurposeCheckboxValues($dealId);
+
+        return array_merge($baseFields, $genderCheckboxes, $maritalStatusCheckboxes, $tripPurposeCheckboxes);
+    }
+
+    /**
+     * Чекбоксы «Цель поездки» по свойству товара property1268 (список iblock 324).
+     *
+     * @return array<string, string>
+     */
+    private function resolveTripPurposeCheckboxValues(int $dealId): array
+    {
+        $result = $this->allTripPurposeCheckboxesOff();
+
+        $elementId = $this->extractTripPurposeListElementIdFromDealProducts($dealId);
+        if ($elementId === '') {
+            return $result;
+        }
+
+        $selectedField = $this->resolveTripPurposeCheckboxFieldForListElement($elementId);
+        if ($selectedField === null || !isset($result[$selectedField])) {
+            return $result;
+        }
+
+        $result[$selectedField] = '/0';
+
+        return $result;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function allTripPurposeCheckboxesOff(): array
+    {
+        $result = [];
+        foreach (self::TRIP_PURPOSE_CHECKBOX_FIELDS as $fieldName) {
+            $result[$fieldName] = '/Off';
+        }
+
+        return $result;
+    }
+
+    private function extractTripPurposeListElementIdFromDealProducts(int $dealId): string
+    {
+        $propertyKey = trim((string) config('bitrix.spain_visa_trip_purpose_product_property', 'property1268'));
+        if ($propertyKey === '') {
+            return '';
+        }
+
+        $products = $this->bitrixApi->getDealProducts($dealId);
+        foreach ($products as $product) {
+            $properties = $product['properties'] ?? [];
+            if (!is_array($properties)) {
+                continue;
+            }
+
+            if (array_key_exists($propertyKey, $properties)) {
+                $value = $this->normalizeProductPropertyScalar($properties[$propertyKey]);
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+
+            foreach ($properties as $key => $raw) {
+                if (!is_string($key)) {
+                    continue;
+                }
+                if (preg_match('/^property_?1268$/i', $key) === 1) {
+                    $value = $this->normalizeProductPropertyScalar($raw);
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function normalizeProductPropertyScalar(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+        if (is_scalar($value)) {
+            return trim((string) $value);
+        }
+        if (is_array($value)) {
+            if (array_key_exists('value', $value)) {
+                return $this->normalizeProductPropertyScalar($value['value']);
+            }
+            if (array_key_exists('VALUE', $value)) {
+                return $this->normalizeProductPropertyScalar($value['VALUE']);
+            }
+            foreach ($value as $item) {
+                $text = $this->normalizeProductPropertyScalar($item);
+                if ($text !== '') {
+                    return $text;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function resolveTripPurposeCheckboxFieldForListElement(string $elementId): ?string
+    {
+        $elementId = trim($elementId);
+        if ($elementId === '') {
+            return null;
+        }
+
+        if ($elementId === '5248') {
+            return $this->resolveCultureOrSportCheckboxField($elementId);
+        }
+
+        return self::TRIP_PURPOSE_LIST_ELEMENT_CHECKBOX[$elementId] ?? null;
+    }
+
+    /**
+     * Элемент 5248 используется и для «Культурная», и для «Спорт» — различаем по NAME в списке.
+     */
+    private function resolveCultureOrSportCheckboxField(string $elementId): string
+    {
+        $iblockId = (int) config('bitrix.spain_visa_trip_purpose_list_iblock_id', 324);
+        $iblockTypeId = (string) config('bitrix.spain_visa_trip_purpose_list_iblock_type_id', 'lists');
+        $name = mb_strtolower($this->bitrixApi->getListElementNameById($iblockId, $elementId, $iblockTypeId));
+
+        if (str_contains($name, 'спорт') || str_contains($name, 'sport')) {
+            return 'Check Box61';
+        }
+
+        return 'Check Box60';
     }
 
     /**
