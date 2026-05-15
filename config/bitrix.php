@@ -263,4 +263,13 @@ return [
         'widowed' => env('BITRIX_SPAIN_VISA_MARITAL_WIDOWED_FIELD', 'Check Box21'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Цель поездки (свойство товара property1268, список iblock 324)
+    |--------------------------------------------------------------------------
+    */
+    'spain_visa_trip_purpose_product_property' => env('BITRIX_SPAIN_VISA_TRIP_PURPOSE_PROPERTY', 'property1268'),
+    'spain_visa_trip_purpose_list_iblock_id' => (int) env('BITRIX_SPAIN_VISA_TRIP_PURPOSE_LIST_IBLOCK_ID', 324),
+    'spain_visa_trip_purpose_list_iblock_type_id' => env('BITRIX_SPAIN_VISA_TRIP_PURPOSE_LIST_IBLOCK_TYPE_ID', 'lists'),
+
 ];
