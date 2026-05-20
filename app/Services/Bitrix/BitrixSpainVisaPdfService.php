@@ -72,6 +72,28 @@ class BitrixSpainVisaPdfService
         '5232' => 'Check Box66',
     ];
 
+    /**
+     * Значения enum «Прописка. Страна» (UF_CRM_1476885037), если iblock UF_CRM_69022C3709EA5 пуст.
+     *
+     * @var array<string, string>
+     */
+    private const REGISTRATION_COUNTRY_ENUM = [
+        '298' => 'BELARUS',
+        '536' => 'OTHER',
+        '2192' => 'AZERBAIJAN',
+        '2194' => 'LATVIA',
+        '2196' => 'LITHUANIA',
+        '2198' => 'ARMENIA',
+        '2200' => 'GEORGIA',
+        '2202' => 'KAZAKHSTAN',
+        '2204' => 'KYRGYZSTAN',
+        '2206' => 'MOLDOVA',
+        '2208' => 'TAJIKISTAN',
+        '2210' => 'UZBEKISTAN',
+        '2212' => 'RUSSIA',
+        '2352' => 'POLAND',
+    ];
+
     private const BIRTH_COUNTRY_ENUM = [
         '268' => 'BELARUS',
         '270' => 'RUSSIA',
@@ -547,17 +569,104 @@ class BitrixSpainVisaPdfService
      */
     private function resolveCitizenshipFromIblock(array $contact): string
     {
-        $iblockId = (int) config('bitrix.employer_country_list_iblock_id', 292);
-        $iblockTypeId = (string) config('bitrix.employer_country_list_iblock_type_id', 'lists');
+        return $this->resolveListElementEnNameUppercase($contact, ['UF_CRM_691825F2E3284']);
+    }
 
-        $elementId = $this->firstNonEmpty($contact, ['UF_CRM_691825F2E3284']);
-        if ($elementId === '') {
+    /**
+     * Страна прописки: UF_CRM_69022C3709EA5 (список 292, EN_NAME) или enum UF_CRM_1476885037.
+     *
+     * @param array<string, mixed> $contact
+     */
+    private function resolveRegistrationCountryEn(array $contact): string
+    {
+        $fromList = $this->resolveListElementEnNameUppercase($contact, ['UF_CRM_69022C3709EA5']);
+        if ($fromList !== '') {
+            return $fromList;
+        }
+
+        $raw = $this->firstNonEmpty($contact, ['UF_CRM_1476885037']);
+        if ($raw === '') {
             return '';
         }
 
-        $enName = $this->bitrixApi->getListElementEnNameById($iblockId, $elementId, $iblockTypeId);
+        $mapped = self::REGISTRATION_COUNTRY_ENUM[$raw] ?? $raw;
 
-        return mb_strtoupper(trim($enName));
+        return mb_strtoupper(trim($mapped));
+    }
+
+    /**
+     * EN_NAME элемента универсального списка (iblock_element в CRM), верхний регистр.
+     *
+     * @param array<string, mixed> $entity
+     * @param string[] $fieldKeys
+     */
+    private function resolveListElementEnNameUppercase(array $entity, array $fieldKeys): string
+    {
+        $iblockId = (int) config('bitrix.employer_country_list_iblock_id', 292);
+        $iblockTypeId = (string) config('bitrix.employer_country_list_iblock_type_id', 'lists');
+
+        foreach ($fieldKeys as $key) {
+            $elementId = $this->extractListElementId($entity, $key);
+            if ($elementId === '') {
+                continue;
+            }
+
+            $enName = $this->bitrixApi->getListElementEnNameById($iblockId, $elementId, $iblockTypeId);
+            $enName = mb_strtoupper(trim($enName));
+            if ($enName !== '') {
+                return $enName;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * ID элемента списка из поля CRM типа iblock_element (скаляр или массив Bitrix).
+     *
+     * @param array<string, mixed> $entity
+     */
+    private function extractListElementId(array $entity, string $key): string
+    {
+        return $this->normalizeListElementId(Arr::get($entity, $key));
+    }
+
+    private function normalizeListElementId(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        if (is_scalar($value)) {
+            $id = (int) $value;
+
+            return $id > 0 ? (string) $id : '';
+        }
+
+        if (!is_array($value)) {
+            return '';
+        }
+
+        if (array_key_exists('VALUE', $value)) {
+            return $this->normalizeListElementId($value['VALUE']);
+        }
+
+        if (array_key_exists('ID', $value)) {
+            return $this->normalizeListElementId($value['ID']);
+        }
+
+        if (array_key_exists('id', $value)) {
+            return $this->normalizeListElementId($value['id']);
+        }
+
+        foreach ($value as $item) {
+            $id = $this->normalizeListElementId($item);
+            if ($id !== '') {
+                return $id;
+            }
+        }
+
+        return '';
     }
 
     /**
@@ -645,14 +754,7 @@ class BitrixSpainVisaPdfService
      */
     private function buildEmployerOrganizationAddress(array $contact): string
     {
-        $iblockId = (int) config('bitrix.employer_country_list_iblock_id', 292);
-        $iblockTypeId = (string) config('bitrix.employer_country_list_iblock_type_id', 'lists');
-
-        $countryElementId = $this->firstNonEmpty($contact, ['UF_CRM_69036B3BEEE67']);
-        $countryEn = $countryElementId !== ''
-            ? $this->bitrixApi->getListElementEnNameById($iblockId, $countryElementId, $iblockTypeId)
-            : '';
-        $countryEn = mb_strtoupper(trim($countryEn));
+        $countryEn = $this->resolveListElementEnNameUppercase($contact, ['UF_CRM_69036B3BEEE67']);
 
         return $this->compactAddress([
             $this->toIcao($this->firstNonEmpty($contact, ['UF_CRM_1475150386'])),
@@ -676,18 +778,11 @@ class BitrixSpainVisaPdfService
      */
     private function buildRegistrationAddress(array $contact, string $email): string
     {
-        $iblockId = (int) config('bitrix.employer_country_list_iblock_id', 292);
-        $iblockTypeId = (string) config('bitrix.employer_country_list_iblock_type_id', 'lists');
-
         $cityRaw = $this->firstNonEmpty($contact, ['UF_CRM_1470544964']);
         $regionRaw = $this->firstNonEmpty($contact, ['UF_CRM_69022DA92F3CB']);
         $region = $this->shouldIncludeRegistrationRegion($cityRaw) ? $this->toIcao($regionRaw) : '';
 
-        $countryElementId = $this->firstNonEmpty($contact, ['UF_CRM_69022C3709EA5']);
-        $countryEn = $countryElementId !== ''
-            ? $this->bitrixApi->getListElementEnNameById($iblockId, $countryElementId, $iblockTypeId)
-            : '';
-        $countryEn = mb_strtoupper(trim($countryEn));
+        $countryEn = $this->resolveRegistrationCountryEn($contact);
 
         return $this->compactAddress([
             $countryEn,
