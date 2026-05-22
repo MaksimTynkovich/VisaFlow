@@ -77,6 +77,29 @@ class BitrixSpainVisaPdfService
      *
      * @var array<string, string>
      */
+    /**
+     * Значения enum «Паспорт. Гражданство при рождении» (UF_CRM_1476883378), если iblock UF_CRM_6902294403B29 пуст.
+     *
+     * @var array<string, string>
+     */
+    private const BIRTH_NATIONALITY_ENUM = [
+        '286' => 'BELARUS',
+        '288' => 'RUSSIA',
+        '290' => 'UKRAINE',
+        '504' => 'LITHUANIA',
+        '510' => 'KAZAKHSTAN',
+        '512' => 'UZBEKISTAN',
+        '564' => 'GEORGIA',
+        '566' => 'AZERBAIJAN',
+        '568' => 'ARMENIA',
+        '570' => 'USSR',
+        '572' => 'CHINA',
+        '574' => 'MOLDOVA',
+        '576' => 'TAJIKISTAN',
+        '578' => 'TURKMENISTAN',
+        '600' => 'OTHER',
+    ];
+
     private const REGISTRATION_COUNTRY_ENUM = [
         '298' => 'BELARUS',
         '536' => 'OTHER',
@@ -215,6 +238,11 @@ class BitrixSpainVisaPdfService
         ]));
         $birthCountry = $this->resolveBirthCountry($contact);
         $nationality = $this->resolveCurrentNationality($contact);
+        $nationalityAtBirth = $this->resolveBirthNationalityEn($contact);
+        $nationalityIfDifferent = $nationalityAtBirth !== ''
+            && mb_strtoupper($nationalityAtBirth) !== mb_strtoupper($nationality)
+            ? $nationalityAtBirth
+            : '';
 
         $passportNo = $this->toUpper($this->firstNonEmpty($contact, [
             'UF_CRM_PASSPORT_NO',
@@ -273,7 +301,7 @@ class BitrixSpainVisaPdfService
             'Text6' => $birthPlace,
             'Text7' => $birthCountry,
             'Text8' => $nationality,
-            'Text9' => $nationality,
+            'Text9' => $nationalityIfDifferent,
             'Text32' => $passportNo,
             'Text33' => $passportIssueDate,
             'Text34' => $passportExpiryDate,
@@ -570,6 +598,28 @@ class BitrixSpainVisaPdfService
     private function resolveCitizenshipFromIblock(array $contact): string
     {
         return $this->resolveListElementEnNameUppercase($contact, ['UF_CRM_691825F2E3284']);
+    }
+
+    /**
+     * Гражданство при рождении: UF_CRM_6902294403B29 (список 292, EN_NAME) или enum UF_CRM_1476883378.
+     *
+     * @param array<string, mixed> $contact
+     */
+    private function resolveBirthNationalityEn(array $contact): string
+    {
+        $fromList = $this->resolveListElementEnNameUppercase($contact, ['UF_CRM_6902294403B29']);
+        if ($fromList !== '') {
+            return $fromList;
+        }
+
+        $raw = $this->firstNonEmpty($contact, ['UF_CRM_1476883378']);
+        if ($raw === '') {
+            return '';
+        }
+
+        $mapped = self::BIRTH_NATIONALITY_ENUM[$raw] ?? $raw;
+
+        return mb_strtoupper(trim($mapped));
     }
 
     /**
